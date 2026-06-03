@@ -8,11 +8,13 @@ import { spacing, radius, shadows, typography } from '../../../theme/theme';
 import { TextField } from '../../../components/TextField';
 import { Button } from '../../../components/Button';
 import { useAdminStore } from '../store/adminStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 export function AdminLoginScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const { signIn } = useAdminStore();
+  const log = useAdminActivityStore((s) => s.log);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,6 +32,7 @@ export function AdminLoginScreen() {
 
     const ok = await signIn(email, password);
     if (ok) {
+      log({ action: 'login', module: 'auth', title: 'Inicio de sesión admin', detail: email });
       router.replace('/(admin)');
     } else {
       Alert.alert('Error', 'Credenciales inválidas');

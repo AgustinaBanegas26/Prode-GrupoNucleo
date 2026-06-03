@@ -12,6 +12,7 @@ import {
   type ImageAssetPlacement,
   useImageAssetsStore,
 } from '../../content/store/imageAssetsStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 const formatDate = (ts: number) => new Date(ts).toLocaleDateString();
 
@@ -21,6 +22,7 @@ export function ImageManagementScreen() {
   const upsert = useImageAssetsStore((s) => s.upsert);
   const remove = useImageAssetsStore((s) => s.remove);
   const toggleStatus = useImageAssetsStore((s) => s.toggleStatus);
+  const log = useAdminActivityStore((s) => s.log);
 
   const [query, setQuery] = useState('');
   const [placementFilter, setPlacementFilter] = useState<ImageAssetPlacement | 'all'>('all');
@@ -61,6 +63,7 @@ export function ImageManagementScreen() {
       Alert.alert('Error', 'Completá Título e Imagen (URL).');
       return;
     }
+    const existed = assets.some((a) => a.id === form.id);
     setSaving(true);
     try {
       upsert({
@@ -68,6 +71,12 @@ export function ImageManagementScreen() {
         title: form.title.trim(),
         imageUrl: form.imageUrl.trim(),
         link: form.link?.trim() ? form.link.trim() : undefined,
+      });
+      log({
+        action: existed ? 'update' : 'create',
+        module: 'images',
+        title: existed ? 'Imagen actualizada' : 'Imagen creada',
+        detail: `${form.title.trim()} · ${form.placement}`,
       });
       setModalVisible(false);
     } finally {
@@ -81,7 +90,10 @@ export function ImageManagementScreen() {
       {
         text: 'Eliminar',
         style: 'destructive',
-        onPress: () => remove(a.id),
+        onPress: () => {
+          remove(a.id);
+          log({ action: 'delete', module: 'images', title: 'Imagen eliminada', detail: a.title });
+        },
       },
     ]);
   };
@@ -121,7 +133,15 @@ export function ImageManagementScreen() {
           </View>
 
           <Pressable
-            onPress={() => toggleStatus(item.id)}
+            onPress={() => {
+              toggleStatus(item.id);
+              log({
+                action: 'toggle',
+                module: 'images',
+                title: 'Estado de imagen',
+                detail: `${item.title} · ${item.status === 'active' ? 'Activo → Inactivo' : 'Inactivo → Activo'}`,
+              });
+            }}
             style={[
               styles.toggleButton,
               { backgroundColor: item.status === 'active' ? theme.colors.success : theme.colors.warning },

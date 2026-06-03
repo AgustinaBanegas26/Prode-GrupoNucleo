@@ -8,6 +8,7 @@ import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
 import type { AppUser, UserStatus } from '../../users/types';
 import { makeEmptyUser, useUsersStore } from '../../users/store/usersStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 export function UsersManagementScreen() {
   const { theme } = useAppTheme();
@@ -17,6 +18,7 @@ export function UsersManagementScreen() {
   const remove = useUsersStore((s) => s.remove);
   const setStatus = useUsersStore((s) => s.setStatus);
   const resetPassword = useUsersStore((s) => s.resetPassword);
+  const log = useAdminActivityStore((s) => s.log);
 
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | UserStatus>('all');
@@ -64,6 +66,7 @@ export function UsersManagementScreen() {
       return;
     }
 
+    const existed = users.some((u) => u.id === form.id);
     setSaving(true);
     try {
       await upsert({
@@ -73,6 +76,12 @@ export function UsersManagementScreen() {
         email: form.email.trim(),
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
+      });
+      log({
+        action: existed ? 'update' : 'create',
+        module: 'users',
+        title: existed ? 'Usuario actualizado' : 'Usuario creado',
+        detail: `${form.firstName.trim()} ${form.lastName.trim()} · @${form.username.trim()}`,
       });
       setModalVisible(false);
     } finally {
@@ -88,6 +97,12 @@ export function UsersManagementScreen() {
         style: 'destructive',
         onPress: async () => {
           await remove(u.id);
+          log({
+            action: 'delete',
+            module: 'users',
+            title: 'Usuario eliminado',
+            detail: `${u.firstName} ${u.lastName} · @${u.username}`,
+          });
         },
       },
     ]);
@@ -96,10 +111,22 @@ export function UsersManagementScreen() {
   const handleBlockToggle = async (u: AppUser) => {
     const next = u.status === 'blocked' ? 'active' : 'blocked';
     await setStatus(u.id, next);
+    log({
+      action: 'toggle',
+      module: 'users',
+      title: next === 'blocked' ? 'Usuario bloqueado' : 'Usuario desbloqueado',
+      detail: `${u.firstName} ${u.lastName} · @${u.username}`,
+    });
   };
 
   const handleResetPassword = async (u: AppUser) => {
     const next = await resetPassword(u.id);
+    log({
+      action: 'update',
+      module: 'users',
+      title: 'Contraseña restablecida',
+      detail: `${u.firstName} ${u.lastName} · @${u.username}`,
+    });
     Alert.alert('Contraseña restablecida', `Nueva contraseña: ${next}`);
   };
 

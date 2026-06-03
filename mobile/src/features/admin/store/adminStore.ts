@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { devAdminAuthService } from '../services/adminAuthService';
+
 export type AdminSession = {
   token: string;
   username: string;
@@ -16,9 +18,6 @@ type AdminStore = {
   signOut: () => void;
 };
 
-const generateToken = () =>
-  `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
-
 export const useAdminStore = create<AdminStore>()(
   persist(
     (set) => ({
@@ -26,17 +25,16 @@ export const useAdminStore = create<AdminStore>()(
       isHydrated: false,
       setHydrated: (value) => set({ isHydrated: value }),
       signIn: async (username, password) => {
-        if (username === 'admin' && password === '1234') {
-          set({
-            session: {
-              token: generateToken(),
-              username,
-              role: 'admin',
-            },
-          });
-          return true;
-        }
-        return false;
+        const res = await devAdminAuthService.signIn(username, password);
+        if (!res.ok) return false;
+        set({
+          session: {
+            token: res.token,
+            username: res.username,
+            role: 'admin',
+          },
+        });
+        return true;
       },
       signOut: () => set({ session: null }),
     }),

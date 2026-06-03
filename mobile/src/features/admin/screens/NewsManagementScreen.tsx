@@ -7,6 +7,7 @@ import { TextField } from '../../../components/TextField';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
 import { makeEmptyNews, type NewsItem, useNewsStore } from '../../content/store/newsStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 const formatDate = (ts: number) => new Date(ts).toLocaleDateString();
 
@@ -16,6 +17,7 @@ export function NewsManagementScreen() {
   const upsert = useNewsStore((s) => s.upsert);
   const remove = useNewsStore((s) => s.remove);
   const toggleStatus = useNewsStore((s) => s.toggleStatus);
+  const log = useAdminActivityStore((s) => s.log);
 
   const [query, setQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
@@ -56,6 +58,7 @@ export function NewsManagementScreen() {
       return;
     }
 
+    const existed = items.some((n) => n.id === form.id);
     setSaving(true);
     try {
       upsert({
@@ -63,6 +66,12 @@ export function NewsManagementScreen() {
         title: form.title.trim(),
         description: form.description.trim(),
         imageUrl: form.imageUrl.trim(),
+      });
+      log({
+        action: existed ? 'update' : 'create',
+        module: 'news',
+        title: existed ? 'Noticia actualizada' : 'Noticia creada',
+        detail: form.title.trim(),
       });
       setModalVisible(false);
     } finally {
@@ -73,7 +82,14 @@ export function NewsManagementScreen() {
   const confirmDelete = (n: NewsItem) => {
     Alert.alert('Eliminar noticia', n.title, [
       { text: 'Cancelar' },
-      { text: 'Eliminar', style: 'destructive', onPress: () => remove(n.id) },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          remove(n.id);
+          log({ action: 'delete', module: 'news', title: 'Noticia eliminada', detail: n.title });
+        },
+      },
     ]);
   };
 
@@ -97,7 +113,15 @@ export function NewsManagementScreen() {
             </Text>
           </View>
           <Pressable
-            onPress={() => toggleStatus(item.id)}
+            onPress={() => {
+              toggleStatus(item.id);
+              log({
+                action: 'toggle',
+                module: 'news',
+                title: 'Estado de noticia',
+                detail: `${item.title} · ${item.status === 'published' ? 'Publicada → Borrador' : 'Borrador → Publicada'}`,
+              });
+            }}
             style={[
               styles.iconBtn,
               { backgroundColor: item.status === 'published' ? theme.colors.success : theme.colors.warning },
@@ -288,4 +312,3 @@ const styles = StyleSheet.create({
   selectPill: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.full, borderWidth: 1 },
   selectPillText: { fontSize: 12, fontWeight: typography.semibold as any },
 });
-

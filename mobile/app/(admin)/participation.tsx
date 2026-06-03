@@ -1,1 +1,1 @@
-export { ParticipationTrackingScreen as default } from '../../src/features/admin/screens/PlaceholderScreens';
+export { ParticipationTrackingScreen as default } from '../../src/features/admin/screens/ParticipationTrackingScreen';

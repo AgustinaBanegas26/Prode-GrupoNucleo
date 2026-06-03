@@ -7,6 +7,7 @@ import { TextField } from '../../../components/TextField';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
 import { makeEmptySlide, type Slide, useSliderStore } from '../../content/store/sliderStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 export function SliderManagementScreen() {
   const { theme } = useAppTheme();
@@ -15,6 +16,7 @@ export function SliderManagementScreen() {
   const remove = useSliderStore((s) => s.remove);
   const toggleStatus = useSliderStore((s) => s.toggleStatus);
   const reorder = useSliderStore((s) => s.reorder);
+  const log = useAdminActivityStore((s) => s.log);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,6 +58,7 @@ export function SliderManagementScreen() {
       return;
     }
 
+    const existed = slides.some((s) => s.id === form.id);
     setSaving(true);
     try {
       const internal = form.button.internalLink?.trim() || undefined;
@@ -72,6 +75,12 @@ export function SliderManagementScreen() {
           externalLink: external,
         },
       });
+      log({
+        action: existed ? 'update' : 'create',
+        module: 'slider',
+        title: existed ? 'Slide actualizado' : 'Slide creado',
+        detail: form.title.trim(),
+      });
       setModalVisible(false);
     } finally {
       setSaving(false);
@@ -84,7 +93,10 @@ export function SliderManagementScreen() {
       {
         text: 'Eliminar',
         style: 'destructive',
-        onPress: () => remove(s.id),
+        onPress: () => {
+          remove(s.id);
+          log({ action: 'delete', module: 'slider', title: 'Slide eliminado', detail: s.title });
+        },
       },
     ]);
   };
@@ -99,6 +111,7 @@ export function SliderManagementScreen() {
     const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
     [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
     reorder(next);
+    log({ action: 'update', module: 'slider', title: 'Orden del slider actualizado' });
   };
 
   const renderItem = ({ item }: { item: Slide }) => (
@@ -130,7 +143,15 @@ export function SliderManagementScreen() {
               <MaterialCommunityIcons name="chevron-down" size={18} color={theme.colors.text} />
             </Pressable>
             <Pressable
-              onPress={() => toggleStatus(item.id)}
+              onPress={() => {
+                toggleStatus(item.id);
+                log({
+                  action: 'toggle',
+                  module: 'slider',
+                  title: 'Estado de slide',
+                  detail: `${item.title} · ${item.status === 'active' ? 'Activo → Inactivo' : 'Inactivo → Activo'}`,
+                });
+              }}
               style={[
                 styles.iconBtn,
                 { backgroundColor: item.status === 'active' ? theme.colors.success : theme.colors.warning },
@@ -435,4 +456,3 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
 });
-

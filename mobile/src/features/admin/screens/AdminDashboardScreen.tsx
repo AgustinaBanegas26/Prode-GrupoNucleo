@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, ScrollView, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
+import { predictions } from '../../mockData';
+import { useNewsStore } from '../../content/store/newsStore';
+import { useImageAssetsStore } from '../../content/store/imageAssetsStore';
+import { useRewardsStore } from '../../content/store/rewardsStore';
+import { useSliderStore } from '../../content/store/sliderStore';
+import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminStore } from '../store/adminStore';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 type MenuOption = {
   id: string;
@@ -119,6 +126,63 @@ export function AdminDashboardScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const { signOut } = useAdminStore();
+  const log = useAdminActivityStore((s) => s.log);
+
+  const users = useUsersStore((s) => s.users);
+  const refreshUsers = useUsersStore((s) => s.refresh);
+
+  const rewards = useRewardsStore((s) => s.rewards);
+  const news = useNewsStore((s) => s.items);
+  const images = useImageAssetsStore((s) => s.assets);
+  const slides = useSliderStore((s) => s.slides);
+
+  useEffect(() => {
+    refreshUsers();
+  }, [refreshUsers]);
+
+  const stats = useMemo(() => {
+    const totalUsers = users.length;
+    const activeUsers = users.filter((u) => u.status === 'active').length;
+    const predictionsCount = predictions.length;
+    const rewardsCount = rewards.length;
+    const publishedNews = news.filter((n) => n.status === 'published').length;
+    const imagesCount = images.length;
+    const activeSlides = slides.filter((s) => s.status === 'active').length;
+
+    const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
+
+    return {
+      totalUsers,
+      activeUsers,
+      predictionsCount,
+      rewardsCount,
+      publishedNews,
+      imagesCount,
+      activeSlides,
+      participationPct,
+    };
+  }, [images.length, news, rewards.length, slides, users]);
+
+  type ChartPoint = { label: string; value: number };
+
+  const chart = useMemo(() => {
+    const today = new Date();
+    const points: ChartPoint[] = [];
+
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const start = d.getTime();
+      const end = start + 24 * 60 * 60 * 1000;
+
+      const count = news.filter((n) => n.status === 'published' && n.date >= start && n.date < end).length;
+      const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+      points.push({ label, value: count });
+    }
+
+    return points;
+  }, [news]);
 
   const getColorValue = (color: MenuOption['color']) => {
     switch (color) {
@@ -136,6 +200,7 @@ export function AdminDashboardScreen() {
   };
 
   const handleLogout = () => {
+    log({ action: 'logout', module: 'auth', title: 'Cierre de sesión admin' });
     signOut();
     router.replace('/(admin)/login');
   };
@@ -172,50 +237,105 @@ export function AdminDashboardScreen() {
             style={[
               styles.statCard,
               {
-                backgroundColor: theme.colors.primaryLight,
+                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-              1,234
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Usuarios
-            </Text>
+            <MaterialCommunityIcons name="account-multiple" size={28} color={theme.colors.primary} />
+            <Text style={[styles.statValue, { color: theme.colors.primary }]}>{stats.totalUsers}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Usuarios</Text>
           </View>
 
           <View
             style={[
               styles.statCard,
               {
-                backgroundColor: theme.colors.surfaceAlt,
+                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text style={[styles.statValue, { color: theme.colors.success }]}>
-              5,678
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Predicciones
-            </Text>
+            <MaterialCommunityIcons name="account-check" size={28} color={theme.colors.success} />
+            <Text style={[styles.statValue, { color: theme.colors.success }]}>{stats.activeUsers}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Usuarios activos</Text>
           </View>
 
           <View
             style={[
               styles.statCard,
               {
-                backgroundColor: theme.colors.surfaceAlt,
+                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text style={[styles.statValue, { color: theme.colors.warning }]}>
-              89
+            <MaterialCommunityIcons name="soccer" size={28} color={theme.colors.info} />
+            <Text style={[styles.statValue, { color: theme.colors.info }]}>{stats.predictionsCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Pronósticos</Text>
+          </View>
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name="gift-outline" size={28} color={theme.colors.warning} />
+            <Text style={[styles.statValue, { color: theme.colors.warning }]}>{stats.rewardsCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Premios</Text>
+          </View>
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name="newspaper-variant" size={28} color={theme.colors.success} />
+            <Text style={[styles.statValue, { color: theme.colors.success }]}>{stats.publishedNews}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Noticias publicadas</Text>
+          </View>
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name="image-multiple" size={28} color={theme.colors.primary} />
+            <Text style={[styles.statValue, { color: theme.colors.primary }]}>{stats.imagesCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Imágenes</Text>
+          </View>
+        </View>
+
+        <View style={[styles.chartCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Participación general</Text>
+          <View style={styles.chartRow}>
+            <Text style={[styles.chartValue, { color: theme.colors.success }]}>{stats.participationPct}%</Text>
+            <Text style={[styles.chartLabel, { color: theme.colors.textSecondary }]}>
+              {stats.activeUsers}/{stats.totalUsers} usuarios activos
             </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Premios
+          </View>
+          <ProgressBar value={stats.participationPct} />
+        </View>
+
+        <View style={[styles.chartCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Noticias publicadas (7 días)</Text>
+          <SimpleBarChart data={chart} />
+          <View style={styles.chartHint}>
+            <MaterialCommunityIcons name="view-carousel" size={16} color={theme.colors.textSecondary} />
+            <Text style={[styles.chartHintText, { color: theme.colors.textSecondary }]}>
+              Slider activo: {stats.activeSlides}/{slides.length}
             </Text>
           </View>
         </View>
@@ -265,6 +385,41 @@ export function AdminDashboardScreen() {
   );
 }
 
+function SimpleBarChart({ data }: { data: { label: string; value: number }[] }) {
+  const { theme } = useAppTheme();
+  const max = Math.max(...data.map((d) => d.value), 1);
+
+  return (
+    <View style={styles.barChart}>
+      {data.map((d) => (
+        <View key={d.label} style={styles.barCol}>
+          <View
+            style={[
+              styles.bar,
+              {
+                height: `${Math.round((d.value / max) * 100)}%`,
+                backgroundColor: theme.colors.primary,
+              },
+            ]}
+          />
+          <Text style={[styles.barLabel, { color: theme.colors.textSecondary }]}>{d.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const { theme } = useAppTheme();
+  const pct = Math.min(Math.max(value, 0), 100);
+
+  return (
+    <View style={[styles.progressTrack, { backgroundColor: theme.colors.surfaceAlt }]}>
+      <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: theme.colors.success }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -294,11 +449,12 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
-    marginBottom: spacing['2xl'],
+    marginBottom: spacing.lg,
   },
   statCard: {
-    flex: 1,
+    width: '48%',
     borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
@@ -313,6 +469,75 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     fontWeight: typography.medium as any,
+    textAlign: 'center',
+  },
+  chartCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    marginBottom: spacing.lg,
+    ...shadows.sm,
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: typography.semibold as any,
+    marginBottom: spacing.md,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  chartValue: {
+    fontSize: 22,
+    fontWeight: typography.bold as any,
+  },
+  chartLabel: {
+    fontSize: 12,
+    fontWeight: typography.medium as any,
+  },
+  progressTrack: {
+    height: 12,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  barChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 140,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  barCol: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+  },
+  bar: {
+    width: '100%',
+    borderRadius: radius.md,
+  },
+  barLabel: {
+    marginTop: spacing.sm,
+    fontSize: 10,
+    fontWeight: typography.medium as any,
+  },
+  chartHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  chartHintText: {
+    fontSize: 12,
+    fontWeight: typography.regular as any,
   },
   sectionTitle: {
     fontSize: 16,

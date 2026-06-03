@@ -1,1 +1,1 @@
-export { RankingsScreen as default } from '../../src/features/admin/screens/PlaceholderScreens';
+export { RankingsScreen as default } from '../../src/features/admin/screens/RankingsScreen';

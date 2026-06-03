@@ -7,12 +7,14 @@ import { TextField } from '../../../components/TextField';
 import { useBrandingStore } from '../../content/store/brandingStore';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
+import { useAdminActivityStore } from '../store/adminActivityStore';
 
 export function SettingsScreen() {
   const { theme } = useAppTheme();
   const config = useBrandingStore((s) => s.config);
   const setConfig = useBrandingStore((s) => s.setConfig);
   const reset = useBrandingStore((s) => s.reset);
+  const log = useAdminActivityStore((s) => s.log);
 
   const [draft, setDraft] = useState(config);
   const [saving, setSaving] = useState(false);
@@ -27,6 +29,7 @@ export function SettingsScreen() {
         homeHeadline: draft.homeHeadline.trim(),
         homeSubheadline: draft.homeSubheadline.trim(),
       });
+      log({ action: 'update', module: 'branding', title: 'Configuración actualizada' });
       Alert.alert('OK', 'Configuración actualizada');
     } finally {
       setSaving(false);
@@ -42,6 +45,7 @@ export function SettingsScreen() {
         onPress: () => {
           reset();
           setDraft(useBrandingStore.getState().config);
+          log({ action: 'update', module: 'branding', title: 'Configuración restablecida' });
         },
       },
     ]);
@@ -111,4 +115,3 @@ const styles = StyleSheet.create({
   resetText: { fontSize: 12, fontWeight: typography.semibold as any },
   card: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.lg, gap: spacing.md, ...shadows.sm },
 });
-

@@ -1,1 +1,1 @@
-export { VotedMatchesScreen as default } from '../../src/features/admin/screens/PlaceholderScreens';
+export { VotedMatchesScreen as default } from '../../src/features/admin/screens/VotedMatchesScreen';
