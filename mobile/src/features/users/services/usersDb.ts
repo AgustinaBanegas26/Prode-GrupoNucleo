@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { AppUser, StoredUser, UserRole, UserStatus } from '../types';
+import type { AppUser, StoredUser, UserRole } from '../types';
 
 const USERS_KEY = 'app_users_v1';
 const LEGACY_USERS_KEY = 'mock_auth_users_v1';
@@ -13,38 +13,59 @@ type LegacyUser = {
 
 const now = () => Date.now();
 
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const normalizeEmployeeNumber = (n: string) => n.trim();
 
 function toStoredUser(u: unknown): StoredUser | null {
   if (!u || typeof u !== 'object') return null;
   const obj = u as Record<string, unknown>;
 
-  const customerNumber = typeof obj.customerNumber === 'string' ? obj.customerNumber : '';
-  const email = typeof obj.email === 'string' ? normalizeEmail(obj.email) : '';
   const password = typeof obj.password === 'string' ? obj.password : '';
+  const numeroEmpleado =
+    typeof obj.numeroEmpleado === 'string'
+      ? normalizeEmployeeNumber(obj.numeroEmpleado)
+      : typeof obj.customerNumber === 'string'
+        ? normalizeEmployeeNumber(obj.customerNumber)
+        : '';
 
-  if (!customerNumber || !email || !password) return null;
+  if (!numeroEmpleado || !password) return null;
 
-  const id = typeof obj.id === 'string' ? obj.id : customerNumber;
-  const firstName = typeof obj.firstName === 'string' ? obj.firstName : '';
-  const lastName = typeof obj.lastName === 'string' ? obj.lastName : '';
-  const username = typeof obj.username === 'string' ? obj.username : customerNumber;
-  const status = (obj.status === 'inactive' || obj.status === 'blocked' || obj.status === 'active'
-    ? obj.status
-    : 'active') as UserStatus;
-  const role = (obj.role === 'admin' || obj.role === 'user' ? obj.role : 'user') as UserRole;
+  const id = typeof obj.id === 'string' ? obj.id : numeroEmpleado;
+  const nombre =
+    typeof obj.nombre === 'string'
+      ? obj.nombre
+      : typeof obj.firstName === 'string'
+        ? obj.firstName
+        : '';
+  const apellido =
+    typeof obj.apellido === 'string'
+      ? obj.apellido
+      : typeof obj.lastName === 'string'
+        ? obj.lastName
+        : '';
+
+  const activo =
+    typeof obj.activo === 'boolean'
+      ? obj.activo
+      : obj.status === 'inactive' || obj.status === 'blocked'
+        ? false
+        : true;
+
+  const rol = (() => {
+    if (obj.rol === 'admin' || obj.rol === 'usuario') return obj.rol as UserRole;
+    if (obj.role === 'admin') return 'admin' as const;
+    return 'usuario' as const;
+  })();
+
   const createdAt = typeof obj.createdAt === 'number' ? obj.createdAt : now();
   const updatedAt = typeof obj.updatedAt === 'number' ? obj.updatedAt : createdAt;
 
   return {
     id,
-    firstName,
-    lastName,
-    email,
-    username,
-    customerNumber,
-    status,
-    role,
+    numeroEmpleado,
+    nombre,
+    apellido,
+    rol,
+    activo,
     createdAt,
     updatedAt,
     password,
@@ -76,13 +97,11 @@ async function migrateLegacyUsersIfNeeded(): Promise<void> {
       const createdAt = now();
       const user: StoredUser = {
         id: legacyUser.customerNumber,
-        firstName: '',
-        lastName: '',
-        email: normalizeEmail(legacyUser.email),
-        username: legacyUser.customerNumber,
-        customerNumber: legacyUser.customerNumber,
-        status: 'active',
-        role: 'user',
+        numeroEmpleado: legacyUser.customerNumber,
+        nombre: '',
+        apellido: '',
+        rol: 'usuario',
+        activo: true,
         createdAt,
         updatedAt: createdAt,
         password: legacyUser.password,
@@ -98,39 +117,64 @@ async function migrateLegacyUsersIfNeeded(): Promise<void> {
   }
 }
 
+async function ensureInitialAdminIfMissing(): Promise<void> {
+  const users = await readUsers();
+  const exists = users.some((u) => u.numeroEmpleado === '0001');
+  if (exists) return;
+
+  const createdAt = now();
+  const initial: StoredUser = {
+    id: '0001',
+    numeroEmpleado: '0001',
+    nombre: 'Admin',
+    apellido: 'Dev',
+    password: '1234',
+    rol: 'admin',
+    activo: true,
+    createdAt,
+    updatedAt: createdAt,
+  };
+
+  await writeUsers([...users, initial]);
+}
+
 export async function readUsers(): Promise<StoredUser[]> {
   await migrateLegacyUsersIfNeeded();
   const rawUsers = await readJsonArray(USERS_KEY);
-  return rawUsers.map(toStoredUser).filter((u): u is StoredUser => !!u);
+  const users = rawUsers.map(toStoredUser).filter((u): u is StoredUser => !!u);
+  return users;
 }
 
-export async function getUserByCustomerNumber(customerNumber: string): Promise<StoredUser | null> {
+export async function getUserByNumeroEmpleado(numeroEmpleado: string): Promise<StoredUser | null> {
+  const normalized = normalizeEmployeeNumber(numeroEmpleado);
   const users = await readUsers();
-  return users.find((u) => u.customerNumber === customerNumber) ?? null;
-}
-
-export async function getUserByEmail(email: string): Promise<StoredUser | null> {
-  const normalized = normalizeEmail(email);
-  const users = await readUsers();
-  return users.find((u) => u.email.toLowerCase() === normalized) ?? null;
+  return users.find((u) => u.numeroEmpleado === normalized) ?? null;
 }
 
 export async function upsertUser(
-  input: Omit<AppUser, 'createdAt' | 'updatedAt'> & { createdAt?: number; updatedAt?: number; password?: string },
+  input: Omit<AppUser, 'createdAt' | 'updatedAt'> & {
+    createdAt?: number;
+    updatedAt?: number;
+    password?: string;
+  },
 ): Promise<StoredUser> {
+  await ensureInitialAdminIfMissing();
   const users = await readUsers();
   const idx = users.findIndex((u) => u.id === input.id);
+  const normalizedNumeroEmpleado = normalizeEmployeeNumber(input.numeroEmpleado);
+  const numeroEmpleadoTaken = users.some((u) => u.numeroEmpleado === normalizedNumeroEmpleado && u.id !== input.id);
+  if (numeroEmpleadoTaken) {
+    throw new Error('Ya existe un usuario con ese número de empleado.');
+  }
 
   const baseCreatedAt = input.createdAt ?? (idx >= 0 ? users[idx].createdAt : now());
   const next: StoredUser = {
     id: input.id,
-    firstName: input.firstName,
-    lastName: input.lastName,
-    email: normalizeEmail(input.email),
-    username: input.username,
-    customerNumber: input.customerNumber,
-    status: input.status,
-    role: input.role,
+    numeroEmpleado: normalizedNumeroEmpleado,
+    nombre: input.nombre,
+    apellido: input.apellido,
+    rol: input.rol,
+    activo: input.activo,
     createdAt: baseCreatedAt,
     updatedAt: input.updatedAt ?? now(),
     password: input.password ?? (idx >= 0 ? users[idx].password : '1234'),
@@ -154,10 +198,14 @@ export async function setUserPassword(userId: string, password: string): Promise
   await writeUsers([...users.slice(0, idx), next, ...users.slice(idx + 1)]);
 }
 
-export async function setUserStatus(userId: string, status: UserStatus): Promise<void> {
+export async function setUserActivo(userId: string, activo: boolean): Promise<void> {
   const users = await readUsers();
   const idx = users.findIndex((u) => u.id === userId);
   if (idx < 0) return;
-  const next: StoredUser = { ...users[idx], status, updatedAt: now() };
+  const next: StoredUser = { ...users[idx], activo, updatedAt: now() };
   await writeUsers([...users.slice(0, idx), next, ...users.slice(idx + 1)]);
+}
+
+export async function ensureDevInitialAdmin(): Promise<void> {
+  await ensureInitialAdminIfMissing();
 }

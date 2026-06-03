@@ -81,7 +81,7 @@ export function ReportsScreen() {
 
   const summary = useMemo(() => {
     const totalUsers = users.length;
-    const activeUsers = users.filter((u) => u.status === 'active').length;
+    const activeUsers = users.filter((u) => u.activo).length;
     const publishedNews = news.filter((n) => n.status === 'published').length;
     const activeRewards = rewards.filter((r) => r.status === 'active').length;
     const activeSlides = slides.filter((s) => s.status === 'active').length;
@@ -94,18 +94,17 @@ export function ReportsScreen() {
 
     if (kind === 'Usuarios') {
       const rows: string[][] = [
-        ['id', 'nombre', 'apellido', 'email', 'usuario', 'estado', 'rol', 'actualizado'],
+        ['id', 'numeroEmpleado', 'nombre', 'apellido', 'rol', 'activo', 'actualizado'],
         ...users
           .slice()
           .sort((a, b) => b.updatedAt - a.updatedAt)
           .map((u) => [
             u.id,
-            u.firstName,
-            u.lastName,
-            u.email,
-            u.username,
-            u.status,
-            u.role,
+            u.numeroEmpleado,
+            u.nombre,
+            u.apellido,
+            u.rol,
+            u.activo ? 'true' : 'false',
             new Date(u.updatedAt).toLocaleString(),
           ]),
       ];

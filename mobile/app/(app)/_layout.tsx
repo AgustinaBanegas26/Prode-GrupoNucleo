@@ -1,24 +1,15 @@
 import { Tabs } from 'expo-router';
 
-import { BottomTabBar } from '../../src/components/BottomTabBar';
-import { useAppTheme } from '../../src/providers/ThemeProvider';
+import { FloatingTabBar } from '../../src/components/FloatingTabBar';
 
 export default function AppLayout() {
-  const { theme } = useAppTheme();
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.border,
-          height: 80,
-          paddingBottom: 8,
-        },
+        tabBarStyle: { display: 'none' }, // Ocultamos el tab bar nativo, usamos el flotante
       }}
-      tabBar={(props) => <BottomTabBar {...props} />}
+      tabBar={(props) => <FloatingTabBar {...props} />}
     />
   );
 }
-

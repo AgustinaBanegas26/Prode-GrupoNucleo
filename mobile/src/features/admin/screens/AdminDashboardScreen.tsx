@@ -11,8 +11,8 @@ import { useImageAssetsStore } from '../../content/store/imageAssetsStore';
 import { useRewardsStore } from '../../content/store/rewardsStore';
 import { useSliderStore } from '../../content/store/sliderStore';
 import { useUsersStore } from '../../users/store/usersStore';
-import { useAdminStore } from '../store/adminStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
+import { useAuthStore } from '../../../store/authStore';
 
 type MenuOption = {
   id: string;
@@ -125,7 +125,7 @@ const MENU_OPTIONS: MenuOption[] = [
 export function AdminDashboardScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
-  const { signOut } = useAdminStore();
+  const signOut = useAuthStore((s) => s.signOut);
   const log = useAdminActivityStore((s) => s.log);
 
   const users = useUsersStore((s) => s.users);
@@ -142,7 +142,7 @@ export function AdminDashboardScreen() {
 
   const stats = useMemo(() => {
     const totalUsers = users.length;
-    const activeUsers = users.filter((u) => u.status === 'active').length;
+    const activeUsers = users.filter((u) => u.activo).length;
     const predictionsCount = predictions.length;
     const rewardsCount = rewards.length;
     const publishedNews = news.filter((n) => n.status === 'published').length;
@@ -202,7 +202,7 @@ export function AdminDashboardScreen() {
   const handleLogout = () => {
     log({ action: 'logout', module: 'auth', title: 'Cierre de sesión admin' });
     signOut();
-    router.replace('/(admin)/login');
+    router.replace('/(auth)/login');
   };
 
   return (

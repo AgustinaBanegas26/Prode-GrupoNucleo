@@ -1,8 +1,12 @@
-export type CustomerNumber = string;
+export type EmployeeNumber = string;
 
 export type AuthUser = {
-  customerNumber: CustomerNumber;
-  email: string;
+  id: string;
+  numeroEmpleado: EmployeeNumber;
+  nombre: string;
+  apellido: string;
+  rol: 'admin' | 'usuario';
+  activo: boolean;
 };
 
 export type AuthSession = {
@@ -11,23 +15,7 @@ export type AuthSession = {
 };
 
 export type LoginInput = {
-  customerNumber: CustomerNumber;
+  numeroEmpleado: EmployeeNumber;
   password: string;
-};
-
-export type CreatePasswordInput = {
-  customerNumber: CustomerNumber;
-  email: string;
-  password: string;
-};
-
-export type RequestPasswordResetInput = {
-  email: string;
-};
-
-export type ResetPasswordInput = {
-  email: string;
-  code: string;
-  newPassword: string;
 };
 
