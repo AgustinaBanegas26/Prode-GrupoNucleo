@@ -9,12 +9,12 @@ import { FormTextField } from '../../src/components/FormTextField';
 import { Screen } from '../../src/components/Screen';
 import { type FirstAccessFormValues, firstAccessSchema } from '../../src/features/auth/schemas';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
-import { useAuthStore } from '../../src/store/authStore';
+import { useAuth } from '../../src/providers/AuthProvider';
 
 export default function FirstAccessScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
-  const createPassword = useAuthStore((s) => s.createPassword);
+  const { changePassword } = useAuth();
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -31,12 +31,21 @@ export default function FirstAccessScreen() {
   const onSubmit = handleSubmit(async ({ confirmPassword, ...values }) => {
     setSubmitError(null);
     try {
-      await createPassword(values);
+      await changePassword(
+        {
+          id: values.customerNumber,
+          cliente_id: values.customerNumber,
+          nombre: '',
+          role: 'client',
+        },
+        values.password,
+      );
       router.replace('/(app)');
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'No se pudo crear la contraseña.');
     }
   });
+
 
   return (
     <Screen>

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { FlatList, ScrollView, StyleSheet, Text, View, Pressable, Linking } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -9,6 +9,7 @@ import {
   DashboardSection,
   Container,
 } from '../../src/components';
+import { Button } from '../../src/components/Button';
 import { Screen } from '../../src/components/Screen';
 import type { CarouselItem } from '../../src/components/ImageCarousel';
 import {
@@ -17,11 +18,17 @@ import {
 } from '../../src/features/mockData';
 import { useSliderStore } from '../../src/features/content/store/sliderStore';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
+import { useAuth } from '../../src/providers/AuthProvider';
 
 export default function AppHomeScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { user, logout } = useAuth();
   const slides = useSliderStore((s) => s.slides);
+
+  if (!user) {
+    return null;
+  }
 
   const carouselItems: CarouselItem[] = slides
     .filter((s) => s.status === 'active')
@@ -45,9 +52,27 @@ export default function AppHomeScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ title: 'Inicio' }} />
       <AppHeader />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Container>
+          <View style={{ marginBottom: 20, gap: 8 }}>
+            <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '700' }}>
+              Bienvenido, {user.nombre}
+            </Text>
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: theme.colors.textSecondary }}>
+                Rol: {user.role === 'admin' ? 'Administrador' : 'Cliente'}
+              </Text>
+              {user.role === 'admin' ? (
+                <Text style={{ color: theme.colors.textSecondary }}>Usuario: {user.usuario}</Text>
+              ) : (
+                <Text style={{ color: theme.colors.textSecondary }}>Número de Cliente: {user.cliente_id}</Text>
+              )}
+            </View>
+            <Button title="Cerrar sesión" variant="secondary" onPress={async () => { await logout(); router.replace('/(auth)/login'); }} />
+          </View>
+
           {/* Carousel */}
           <ImageCarousel items={carouselItems} onItemPress={handleCarouselPress} />
 

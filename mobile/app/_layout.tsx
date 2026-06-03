@@ -6,38 +6,37 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
-import { useAuthStore } from '../src/store/authStore';
+import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
-  const session = useAuthStore((s) => s.session);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (loading) return;
 
     const root = segments[0];
     const inAuthGroup = root === '(auth)';
     const inAppGroup = root === '(app)';
 
-    if (!session && inAppGroup) {
+    if (!user && inAppGroup) {
       router.replace('/(auth)/login');
       return;
     }
 
-    if (session && (inAuthGroup || !root)) {
+    if (user && (inAuthGroup || !root)) {
       router.replace('/(app)');
       return;
     }
 
-    if (!session && !root) {
+    if (!user && !root) {
       router.replace('/(auth)/login');
     }
-  }, [isHydrated, router, session, segments.join('/')]);
+  }, [loading, router, user, segments.join('/')]);
 
-  if (!isHydrated) {
+  if (loading) {
     return <LoadingScreen />;
   }
 
@@ -49,11 +48,14 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <AuthGate>
-            <Slot />
-          </AuthGate>
+          <AuthProvider>
+            <AuthGate>
+              <Slot />
+            </AuthGate>
+          </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }
+

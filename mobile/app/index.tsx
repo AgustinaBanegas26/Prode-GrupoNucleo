@@ -1,15 +1,15 @@
 import { Redirect } from 'expo-router';
 
 import { LoadingScreen } from '../src/components/LoadingScreen';
-import { useAuthStore } from '../src/store/authStore';
+import { useAuth } from '../src/providers/AuthProvider';
 
 export default function HomeScreen() {
-  const session = useAuthStore((s) => s.session);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const { user, loading } = useAuth();
 
-  if (!isHydrated) {
+  if (loading) {
     return <LoadingScreen />;
   }
 
-  return session ? <Redirect href="/(app)" /> : <Redirect href="/(auth)/login" />;
+  return user ? <Redirect href="/(app)" /> : <Redirect href="/(auth)/login" />;
 }
+

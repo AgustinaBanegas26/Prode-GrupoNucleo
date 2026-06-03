@@ -5,22 +5,23 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, ProfileStatsCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
 import { profileMenu, profileStats } from '../../src/features/mockData';
-import { useAuthStore } from '../../src/store/authStore';
+import { useAuth } from '../../src/providers/AuthProvider';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const session = useAuthStore((state) => state.session);
-  const signOut = useAuthStore((state) => state.signOut);
+  const { user, logout } = useAuth();
 
-  const name = session ? 'Juan Pérez' : 'Juan Pérez';
-  const email = session?.user.email ?? 'juan.perez@email.com';
+  const name = user ? user.nombre : 'Usuario';
+  const email = user ? (user.role === 'admin' ? `Admin: ${user.usuario}` : `Cliente: ${user.cliente_id}`) : '';
 
   return (
     <Screen style={styles.screen}>
       <AppHeader />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarBox}>
-          <Text style={styles.avatarLabel}>JP</Text>
+          <Text style={styles.avatarLabel}>
+            {user?.nombre ? user.nombre.substring(0, 2).toUpperCase() : 'U'}
+          </Text>
         </View>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.email}>{email}</Text>
@@ -35,8 +36,8 @@ export default function ProfileScreen() {
           ))}
           <Pressable
             style={[styles.menuItem, styles.logoutButton]}
-            onPress={() => {
-              signOut();
+            onPress={async () => {
+              await logout();
               router.replace('/(auth)/login');
             }}
           >
@@ -47,6 +48,7 @@ export default function ProfileScreen() {
     </Screen>
   );
 }
+
 
 const styles = StyleSheet.create({
   screen: {
