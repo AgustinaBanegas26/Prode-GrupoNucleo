@@ -1,21 +1,14 @@
-export type UserStatus = 'active' | 'inactive' | 'blocked';
-
-export type UserRole = 'user' | 'admin';
+export type UserRole = 'admin' | 'usuario';
 
 export type AppUser = {
   id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  username: string;
-  customerNumber: string;
-  status: UserStatus;
-  role: UserRole;
+  numeroEmpleado: string;
+  nombre: string;
+  apellido: string;
+  rol: UserRole;
+  activo: boolean;
   createdAt: number;
   updatedAt: number;
 };
 
-export type StoredUser = AppUser & {
-  password: string;
-};
-
+export type StoredUser = AppUser & { password: string };

@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { useForm } from 'react-hook-form';
 
 import { Button } from '../../src/components/Button';
@@ -28,14 +28,15 @@ export default function LoginScreen() {
 
   const { control, handleSubmit, formState } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { customerNumber: '', password: '' },
+    defaultValues: { numeroEmpleado: '', password: '' },
   });
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
       await signIn(values);
-      router.replace('/(app)');
+      const role = useAuthStore.getState().session?.user.rol;
+      router.replace(role === 'admin' ? '/(admin)' : '/(app)');
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'No se pudo iniciar sesión.');
     }
@@ -50,16 +51,16 @@ export default function LoginScreen() {
             Iniciar sesión
           </Text>
           <Text style={{ color: theme.colors.muted, fontSize: 14, textAlign: 'center' }}>
-            Ingresá tu número de cliente y contraseña.
+            Ingresá tu número de empleado y contraseña.
           </Text>
         </View>
 
         <View style={{ gap: 14 }}>
           <FormTextField
             control={control}
-            name="customerNumber"
-            label="Número de cliente"
-            placeholder="Ej: 123456"
+            name="numeroEmpleado"
+            label="Número de empleado"
+            placeholder="Ej: 0001"
             keyboardType="number-pad"
           />
           <FormTextField
@@ -77,19 +78,6 @@ export default function LoginScreen() {
           ) : null}
 
           <Button title="Entrar" onPress={onSubmit} loading={formState.isSubmitting} />
-
-          <View style={{ gap: 10 }}>
-            <Pressable onPress={() => router.push('/(auth)/first-access')}>
-              <Text style={{ color: theme.colors.primary, fontSize: 14, fontWeight: '700' }}>
-                Primer acceso: crear contraseña
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
-              <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
-                Olvidé mi contraseña
-              </Text>
-            </Pressable>
-          </View>
         </View>
       </View>
     </Screen>

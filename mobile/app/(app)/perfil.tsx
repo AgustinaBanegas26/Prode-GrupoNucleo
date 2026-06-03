@@ -12,8 +12,9 @@ export default function ProfileScreen() {
   const session = useAuthStore((state) => state.session);
   const signOut = useAuthStore((state) => state.signOut);
 
-  const name = session ? 'Juan Pérez' : 'Juan Pérez';
-  const email = session?.user.email ?? 'juan.perez@email.com';
+  const name = session ? `${session.user.nombre} ${session.user.apellido}`.trim() : '';
+  const numeroEmpleado = session?.user.numeroEmpleado ?? '';
+  const isAdmin = session?.user.rol === 'admin';
 
   return (
     <Screen style={styles.screen}>
@@ -22,8 +23,8 @@ export default function ProfileScreen() {
         <View style={styles.avatarBox}>
           <Text style={styles.avatarLabel}>JP</Text>
         </View>
-        <Text style={styles.name}>{name}</Text>
-        <Text style={styles.email}>{email}</Text>
+        <Text style={styles.name}>{name || 'Usuario'}</Text>
+        {numeroEmpleado ? <Text style={styles.email}>N° empleado: {numeroEmpleado}</Text> : null}
 
         <ProfileStatsCard {...profileStats} />
 
@@ -33,6 +34,11 @@ export default function ProfileScreen() {
               <Text style={styles.menuText}>{item.label}</Text>
             </Pressable>
           ))}
+          {isAdmin ? (
+            <Pressable style={styles.menuItem} onPress={() => router.push('/(admin)' as any)}>
+              <Text style={styles.menuText}>Panel administrador</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[styles.menuItem, styles.logoutButton]}
             onPress={() => {

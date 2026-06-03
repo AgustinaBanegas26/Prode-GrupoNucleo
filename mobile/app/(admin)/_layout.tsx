@@ -1,25 +1,22 @@
 import React from 'react';
-import { Redirect, Stack, useSegments } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
-import { useAdminStore } from '../../src/features/admin/store/adminStore';
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function AdminLayout() {
-  const session = useAdminStore((s) => s.session);
-  const isHydrated = useAdminStore((s) => s.isHydrated);
-  const segments = useSegments();
-  const currentRoute = segments.at(-1);
-  const isLoginRoute = currentRoute === 'login';
+  const session = useAuthStore((s) => s.session);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
 
   if (!isHydrated) {
     return <LoadingScreen />;
   }
 
-  if (!session && !isLoginRoute) {
-    return <Redirect href="/(admin)/login" />;
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
   }
 
-  if (session && isLoginRoute) {
-    return <Redirect href="/(admin)" />;
+  if (session.user.rol !== 'admin') {
+    return <Redirect href="/(app)" />;
   }
 
   return (
@@ -28,7 +25,6 @@ export default function AdminLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="login" />
       <Stack.Screen name="index" />
       <Stack.Screen name="users" />
       <Stack.Screen name="statistics" />

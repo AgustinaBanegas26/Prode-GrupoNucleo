@@ -33,9 +33,9 @@ export function ParticipationTrackingScreen() {
 
   const stats = useMemo(() => {
     const totalUsers = users.length;
-    const activeUsers = users.filter((u) => u.status === 'active').length;
-    const blockedUsers = users.filter((u) => u.status === 'blocked').length;
-    const inactiveUsers = users.filter((u) => u.status === 'inactive').length;
+    const activeUsers = users.filter((u) => u.activo).length;
+    const blockedUsers = users.filter((u) => !u.activo).length;
+    const inactiveUsers = 0;
 
     const predictionsCount = predictions.length;
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
@@ -146,4 +146,3 @@ const styles = StyleSheet.create({
   recentTitle: { fontSize: 13, fontWeight: typography.semibold as any },
   recentMeta: { fontSize: 12, fontWeight: typography.regular as any },
 });
-
