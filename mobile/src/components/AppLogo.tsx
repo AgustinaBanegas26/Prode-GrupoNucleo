@@ -1,0 +1,17 @@
+import React from 'react';
+import { Image, type ImageStyle, type StyleProp } from 'react-native';
+import { useAppTheme } from '../providers/ThemeProvider';
+
+const lightLogo = require('../../images/icononucleo.png');
+const darkLogo = require('../../images/icononucleo-light.png');
+
+export function AppLogo({ style }: { style?: StyleProp<ImageStyle> }) {
+  const { resolvedScheme } = useAppTheme();
+
+  return (
+    <Image
+      source={resolvedScheme === 'dark' ? darkLogo : lightLogo}
+      style={[{ width: 100, height: 28, resizeMode: 'contain' }, style]}
+    />
+  );
+}

@@ -1,17 +1,23 @@
-import { Stack } from 'expo-router';
+import { Tabs } from 'expo-router';
 
+import { BottomTabBar } from '../../src/components/BottomTabBar';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 
 export default function AppLayout() {
   const { theme } = useAppTheme();
 
   return (
-    <Stack
+    <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: theme.colors.surface },
-        headerTintColor: theme.colors.text,
-        contentStyle: { backgroundColor: theme.colors.background },
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.border,
+          height: 80,
+          paddingBottom: 8,
+        },
       }}
+      tabBar={(props) => <BottomTabBar {...props} />}
     />
   );
 }

@@ -33,7 +33,7 @@ export function TextField({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.muted}
+        placeholderTextColor={theme.colors.placeholder}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}

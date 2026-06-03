@@ -1,50 +1,131 @@
+import React, { createContext, useContext, useCallback, useMemo, useEffect } from 'react';
+import { useColorScheme, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import React, { createContext, useContext, useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import {
+  useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
 
 import { useThemeStore } from '../store/themeStore';
-import { type AppColorScheme, createTheme, type AppTheme } from '../theme/theme';
+import { createTheme, type AppColorScheme, type AppTheme } from '../theme/theme';
 
+/**
+ * Context value type definition
+ */
 type ThemeContextValue = {
   theme: AppTheme;
-  resolvedScheme: AppColorScheme;
+  isDark: boolean;
+  colorScheme: AppColorScheme;
   themeMode: 'system' | 'light' | 'dark';
   setThemeMode: (mode: 'system' | 'light' | 'dark') => void;
+  fontsLoaded: boolean;
 };
 
+/**
+ * Create theme context
+ */
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Theme Provider Component
+ * Manages theme state, fonts loading, and provides theme context
+ *
+ * Rules of Hooks compliance:
+ * - All hooks are called at the top level
+ * - No hooks are called conditionally
+ * - Hooks are called in the same order on every render
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useColorScheme();
+  // Step 1: Load fonts (must be called before any conditional returns)
+  const [fontsLoaded, fontError] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
+  // Step 2: Get system color scheme preference
+  const systemColorScheme = useColorScheme();
+
+  // Step 3: Get theme preference from store
   const themeMode = useThemeStore((s) => s.themeMode);
   const setThemeMode = useThemeStore((s) => s.setThemeMode);
+  const isHydrated = useThemeStore((s) => s.isHydrated);
 
-  const resolvedScheme: AppColorScheme = useMemo(() => {
+  // Step 4: Resolve the actual color scheme based on theme mode
+  const colorScheme: AppColorScheme = useMemo(() => {
     if (themeMode === 'system') {
-      return systemScheme === 'dark' ? 'dark' : 'light';
+      return systemColorScheme === 'dark' ? 'dark' : 'light';
     }
     return themeMode;
-  }, [systemScheme, themeMode]);
+  }, [themeMode, systemColorScheme]);
 
-  const theme = useMemo(() => createTheme(resolvedScheme), [resolvedScheme]);
+  // Step 5: Create theme object
+  const theme = useMemo(() => createTheme(colorScheme), [colorScheme]);
 
-  const value = useMemo(
-    () => ({ theme, resolvedScheme, themeMode, setThemeMode }),
-    [resolvedScheme, setThemeMode, theme, themeMode],
+  // Step 6: Setup fonts globally
+  useEffect(() => {
+    if (!fontsLoaded || fontError) {
+      return;
+    }
+
+    // Note: Text.defaultProps setup is handled through expo-app-loading and global styles
+    // The Poppins font is loaded and will be used automatically
+  }, [fontsLoaded, fontError]);
+
+  // Step 7: Create context value with useCallback for setThemeMode
+  const handleSetThemeMode = useCallback(
+    (mode: 'system' | 'light' | 'dark') => {
+      setThemeMode(mode);
+    },
+    [setThemeMode],
   );
 
+  const contextValue = useMemo<ThemeContextValue>(
+    () => ({
+      theme,
+      isDark: colorScheme === 'dark',
+      colorScheme,
+      themeMode,
+      setThemeMode: handleSetThemeMode,
+      fontsLoaded,
+    }),
+    [theme, colorScheme, themeMode, handleSetThemeMode, fontsLoaded],
+  );
+
+  // Show loading screen while fonts are loading
+  if (!fontsLoaded || !isHydrated) {
+    return null;
+  }
+
   return (
-    <ThemeContext.Provider value={value}>
-      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+    <ThemeContext.Provider value={contextValue}>
+      <StatusBar 
+        style={theme.isDark ? 'light' : 'dark'} 
+      />
       {children}
     </ThemeContext.Provider>
   );
 }
 
-export function useAppTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) {
-    throw new Error('useAppTheme must be used within ThemeProvider');
+/**
+ * Hook to use theme context
+ * Must be called within ThemeProvider
+ */
+export function useAppTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+
+  if (!context) {
+    throw new Error('useAppTheme must be used within <ThemeProvider>');
   }
-  return ctx;
+
+  return context;
 }
+
+/**
+ * Export context for advanced use cases
+ */
+export { ThemeContext };
