@@ -12,7 +12,7 @@ import { useAdminStore } from '../store/adminStore';
 export function AdminLoginScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
-  const { login } = useAdminStore();
+  const { signIn } = useAdminStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +28,8 @@ export function AdminLoginScreen() {
     // Simular delay de verificación
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    if (login(email, password)) {
+    const ok = await signIn(email, password);
+    if (ok) {
       router.replace('/(admin)');
     } else {
       Alert.alert('Error', 'Credenciales inválidas');
@@ -53,7 +54,7 @@ export function AdminLoginScreen() {
             ]}
           >
             <MaterialCommunityIcons
-              name="shield-admin"
+              name="shield-account"
               size={48}
               color={theme.colors.primary}
             />

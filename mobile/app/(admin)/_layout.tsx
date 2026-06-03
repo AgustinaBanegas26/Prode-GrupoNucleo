@@ -1,17 +1,25 @@
 import React from 'react';
-import { Stack } from 'expo-router';
-import { useAdminStore } from '../../features/admin/store/adminStore';
-import { AdminLoginScreen } from '../../features/admin/screens/AdminLoginScreen';
+import { Redirect, Stack, useSegments } from 'expo-router';
+import { LoadingScreen } from '../../src/components/LoadingScreen';
+import { useAdminStore } from '../../src/features/admin/store/adminStore';
 
 export default function AdminLayout() {
-  const { isLoggedIn } = useAdminStore();
+  const session = useAdminStore((s) => s.session);
+  const isHydrated = useAdminStore((s) => s.isHydrated);
+  const segments = useSegments();
+  const currentRoute = segments.at(-1);
+  const isLoginRoute = currentRoute === 'login';
 
-  if (!isLoggedIn) {
-    return (
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" component={AdminLoginScreen} />
-      </Stack>
-    );
+  if (!isHydrated) {
+    return <LoadingScreen />;
+  }
+
+  if (!session && !isLoginRoute) {
+    return <Redirect href="/(admin)/login" />;
+  }
+
+  if (session && isLoginRoute) {
+    return <Redirect href="/(admin)" />;
   }
 
   return (
@@ -20,6 +28,7 @@ export default function AdminLayout() {
         headerShown: false,
       }}
     >
+      <Stack.Screen name="login" />
       <Stack.Screen name="index" />
       <Stack.Screen name="users" />
       <Stack.Screen name="statistics" />
@@ -30,6 +39,9 @@ export default function AdminLayout() {
       <Stack.Screen name="voted-matches" />
       <Stack.Screen name="user-activity" />
       <Stack.Screen name="images" />
+      <Stack.Screen name="slider" />
+      <Stack.Screen name="news" />
+      <Stack.Screen name="settings" />
     </Stack>
   );
 }

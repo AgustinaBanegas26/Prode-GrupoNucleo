@@ -85,16 +85,40 @@ const MENU_OPTIONS: MenuOption[] = [
     id: '9',
     icon: 'image-multiple',
     label: 'Gestión de Imágenes',
-    description: 'Agregar imágenes al slider',
+    description: 'Slider, ads y banners',
     route: '/(admin)/images',
     color: 'primary',
+  },
+  {
+    id: '10',
+    icon: 'view-carousel',
+    label: 'Gestión de Slider',
+    description: 'Slides, botones y orden',
+    route: '/(admin)/slider',
+    color: 'info',
+  },
+  {
+    id: '11',
+    icon: 'newspaper-variant',
+    label: 'Noticias',
+    description: 'Publicar y editar',
+    route: '/(admin)/news',
+    color: 'success',
+  },
+  {
+    id: '12',
+    icon: 'cog',
+    label: 'Configuración',
+    description: 'Logo, colores y textos',
+    route: '/(admin)/settings',
+    color: 'warning',
   },
 ];
 
 export function AdminDashboardScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
-  const { logout } = useAdminStore();
+  const { signOut } = useAdminStore();
 
   const getColorValue = (color: MenuOption['color']) => {
     switch (color) {
@@ -112,7 +136,7 @@ export function AdminDashboardScreen() {
   };
 
   const handleLogout = () => {
-    logout();
+    signOut();
     router.replace('/(admin)/login');
   };
 

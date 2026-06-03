@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Pressable, View, StyleSheet, Animated, Dimensions } from 'react-native';
+import { Pressable, View, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../providers/ThemeProvider';
@@ -10,7 +10,7 @@ type ThemeToggleProps = {
 };
 
 export function ThemeToggle({ onPress }: ThemeToggleProps) {
-  const { theme, themeMode, setThemeMode, isDark } = useAppTheme();
+  const { theme, themeMode, setThemeMode } = useAppTheme();
 
   const handlePress = useCallback(() => {
     const modes: Array<'light' | 'dark' | 'system'> = ['light', 'dark', 'system'];
@@ -64,9 +64,6 @@ export function ThemeToggle({ onPress }: ThemeToggleProps) {
           color={theme.colors.primary}
           style={styles.icon}
         />
-        <Pressable style={styles.label} onPress={handlePress}>
-          {/* Label will be visible in future versions */}
-        </Pressable>
       </View>
     </Pressable>
   );
@@ -88,9 +85,5 @@ const styles = StyleSheet.create({
   icon: {
     width: 16,
     height: 16,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

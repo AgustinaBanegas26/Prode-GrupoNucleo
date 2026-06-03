@@ -1,5 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  getUserByCustomerNumber,
+  getUserByEmail,
+  readUsers,
+  setUserPassword,
+  upsertUser,
+} from '../../users/services/usersDb';
+import type { StoredUser } from '../../users/types';
+
 import type {
   AuthSession,
   AuthUser,
@@ -9,19 +18,12 @@ import type {
   ResetPasswordInput,
 } from '../types';
 
-type StoredUser = {
-  customerNumber: string;
-  email: string;
-  password: string;
-};
-
 type ResetCodeRecord = {
   email: string;
   code: string;
   createdAt: number;
 };
 
-const USERS_KEY = 'mock_auth_users_v1';
 const RESET_CODES_KEY = 'mock_auth_reset_codes_v1';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -32,18 +34,6 @@ const generateToken = () =>
     .slice(2)}`;
 
 const generateCode = () => `${Math.floor(100000 + Math.random() * 900000)}`;
-
-async function readUsers(): Promise<StoredUser[]> {
-  const raw = await AsyncStorage.getItem(USERS_KEY);
-  if (!raw) return [];
-  const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) return [];
-  return parsed as StoredUser[];
-}
-
-async function writeUsers(users: StoredUser[]) {
-  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
 
 async function readResetCodes(): Promise<ResetCodeRecord[]> {
   const raw = await AsyncStorage.getItem(RESET_CODES_KEY);
@@ -64,10 +54,12 @@ function toUser(u: StoredUser): AuthUser {
 export async function mockLogin(input: LoginInput): Promise<AuthSession> {
   await sleep(350);
 
-  const users = await readUsers();
-  const user = users.find((u) => u.customerNumber === input.customerNumber);
+  const user = await getUserByCustomerNumber(input.customerNumber);
   if (!user) {
     throw new Error('El número de cliente no está registrado. Usá "Primer acceso".');
+  }
+  if (user.status === 'blocked') {
+    throw new Error('Tu cuenta está bloqueada. Contactá al administrador.');
   }
   if (user.password !== input.password) {
     throw new Error('La contraseña es incorrecta.');
@@ -92,13 +84,21 @@ export async function mockCreatePassword(input: CreatePasswordInput): Promise<Au
     throw new Error('Este email ya está asociado a otro número de cliente.');
   }
 
-  const created: StoredUser = {
-    customerNumber: input.customerNumber,
+  const createdAt = Date.now();
+  const created = await upsertUser({
+    id: input.customerNumber,
+    firstName: '',
+    lastName: '',
     email: normalizedEmail,
+    username: input.customerNumber,
+    customerNumber: input.customerNumber,
+    status: 'active',
+    role: 'user',
+    createdAt,
+    updatedAt: createdAt,
     password: input.password,
-  };
+  });
 
-  await writeUsers([...users, created]);
   return { token: generateToken(), user: toUser(created) };
 }
 
@@ -108,8 +108,7 @@ export async function mockRequestPasswordReset(
   await sleep(450);
 
   const normalizedEmail = input.email.trim().toLowerCase();
-  const users = await readUsers();
-  const user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
+  const user = await getUserByEmail(normalizedEmail);
   if (!user) {
     throw new Error('No existe una cuenta con ese email.');
   }
@@ -137,15 +136,11 @@ export async function mockResetPassword(input: ResetPasswordInput): Promise<void
     throw new Error('El código es inválido.');
   }
 
-  const users = await readUsers();
-  const idx = users.findIndex((u) => u.email.toLowerCase() === normalizedEmail);
-  if (idx < 0) {
+  const user = await getUserByEmail(normalizedEmail);
+  if (!user) {
     throw new Error('No existe una cuenta con ese email.');
   }
-
-  const updated: StoredUser = { ...users[idx], password: input.newPassword };
-  const nextUsers = [...users.slice(0, idx), updated, ...users.slice(idx + 1)];
-  await writeUsers(nextUsers);
+  await setUserPassword(user.id, input.newPassword);
 
   const nextRecords = records.filter((r) => r.email.toLowerCase() !== normalizedEmail);
   await writeResetCodes(nextRecords);

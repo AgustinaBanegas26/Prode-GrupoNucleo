@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, ScrollView, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
@@ -9,31 +8,63 @@ import { spacing, radius, shadows, typography } from '../../../theme/theme';
 
 const screenWidth = Dimensions.get('window').width;
 
+type ChartPoint = { label: string; value: number };
+
+function SimpleBarChart({ data }: { data: ChartPoint[] }) {
+  const { theme } = useAppTheme();
+
+  const max = Math.max(...data.map((d) => d.value), 1);
+
+  return (
+    <View style={styles.barChart}>
+      {data.map((d) => (
+        <View key={d.label} style={styles.barCol}>
+          <View
+            style={[
+              styles.bar,
+              {
+                height: `${Math.round((d.value / max) * 100)}%`,
+                backgroundColor: theme.colors.primary,
+              },
+            ]}
+          />
+          <Text style={[styles.barLabel, { color: theme.colors.textSecondary }]}>{d.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const { theme } = useAppTheme();
+  const pct = Math.min(Math.max(value, 0), 100);
+
+  return (
+    <View style={[styles.progressTrack, { backgroundColor: theme.colors.surfaceAlt }]}>
+      <View
+        style={[
+          styles.progressFill,
+          {
+            width: `${pct}%`,
+            backgroundColor: theme.colors.success,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
 export function StatisticsScreen() {
   const { theme } = useAppTheme();
 
-  const lineChartData = {
-    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
-    datasets: [
-      {
-        data: [120, 180, 150, 200, 220, 190, 240],
-      },
-    ],
-  };
-
-  const pieChartData = [
-    {
-      name: 'Predicciones Acertadas',
-      population: 65,
-      color: theme.colors.success,
-      legendFontColor: theme.colors.text,
-    },
-    {
-      name: 'Predicciones Fallidas',
-      population: 35,
-      color: theme.colors.error,
-      legendFontColor: theme.colors.text,
-    },
+  const dailyParticipation: ChartPoint[] = [
+    { label: 'Lun', value: 120 },
+    { label: 'Mar', value: 180 },
+    { label: 'Mié', value: 150 },
+    { label: 'Jue', value: 200 },
+    { label: 'Vie', value: 220 },
+    { label: 'Sáb', value: 190 },
+    { label: 'Dom', value: 240 },
   ];
 
   return (
@@ -161,25 +192,9 @@ export function StatisticsScreen() {
           ]}
         >
           <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-            Predicciones por Día
+            Participación diaria
           </Text>
-          <LineChart
-            data={lineChartData}
-            width={screenWidth - spacing.lg * 2 - spacing.lg * 2}
-            height={220}
-            chartConfig={{
-              backgroundColor: theme.colors.surface,
-              backgroundGradientFrom: theme.colors.surface,
-              backgroundGradientTo: theme.colors.surface,
-              decimalPlaces: 0,
-              color: () => theme.colors.primary,
-              labelColor: () => theme.colors.textSecondary,
-              style: {
-                borderRadius: radius.lg,
-              },
-            }}
-            bezier
-          />
+          <SimpleBarChart data={dailyParticipation} />
         </View>
 
         <View
@@ -194,17 +209,23 @@ export function StatisticsScreen() {
           <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
             Tasa de Precisión
           </Text>
-          <PieChart
-            data={pieChartData}
-            width={screenWidth - spacing.lg * 2 - spacing.lg * 2}
-            height={220}
-            chartConfig={{
-              color: () => theme.colors.primary,
-            }}
-            accessor="population"
-            backgroundColor="transparent"
-            paddingLeft={spacing.lg as any}
-          />
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressValue, { color: theme.colors.success }]}>65%</Text>
+            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>
+              Predicciones acertadas
+            </Text>
+          </View>
+          <ProgressBar value={65} />
+          <View style={styles.progressLegend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: theme.colors.success }]} />
+              <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Acertadas</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: theme.colors.error }]} />
+              <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>Fallidas</Text>
+            </View>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -271,5 +292,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: typography.semibold as any,
     marginBottom: spacing.md,
+  },
+  barChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 180,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  barCol: {
+    width: (screenWidth - spacing.lg * 2 - spacing.lg * 2 - spacing.md * 2) / 8,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+  },
+  bar: {
+    width: '100%',
+    borderRadius: radius.md,
+  },
+  barLabel: {
+    marginTop: spacing.sm,
+    fontSize: 10,
+    fontWeight: typography.medium as any,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  progressValue: {
+    fontSize: 22,
+    fontWeight: typography.bold as any,
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: typography.medium as any,
+  },
+  progressTrack: {
+    height: 12,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  progressLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: radius.full,
+  },
+  legendText: {
+    fontSize: 12,
+    fontWeight: typography.medium as any,
   },
 });

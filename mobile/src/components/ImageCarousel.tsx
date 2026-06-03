@@ -1,7 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
-  ScrollView,
   StyleSheet,
   Dimensions,
   Pressable,
@@ -13,7 +12,7 @@ import {
 import { useAppTheme } from '../providers/ThemeProvider';
 import { spacing, radius, shadows } from '../theme/theme';
 
-type CarouselItem = {
+export type CarouselItem = {
   id: string;
   title: string;
   imageUrl: string;
@@ -31,6 +30,7 @@ const ITEM_WIDTH = screenWidth - spacing.lg * 2;
 
 export function ImageCarousel({ items, onItemPress, autoplayInterval = 5000 }: ImageCarouselProps) {
   const { theme } = useAppTheme();
+  const listRef = useRef<FlatList<CarouselItem>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const handleViewableItemsChanged = useCallback(
@@ -41,6 +41,21 @@ export function ImageCarousel({ items, onItemPress, autoplayInterval = 5000 }: I
     },
     [],
   );
+
+  useEffect(() => {
+    if (!items || items.length <= 1) return;
+    if (!autoplayInterval) return;
+
+    const id = setInterval(() => {
+      setActiveIndex((prev) => {
+        const nextIndex = (prev + 1) % items.length;
+        listRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+        return nextIndex;
+      });
+    }, autoplayInterval);
+
+    return () => clearInterval(id);
+  }, [autoplayInterval, items]);
 
   const viewabilityConfig = useMemo(
     () => ({
@@ -54,16 +69,17 @@ export function ImageCarousel({ items, onItemPress, autoplayInterval = 5000 }: I
       onPress={() => onItemPress?.(item)}
       style={[styles.itemContainer, { width: ITEM_WIDTH }]}
     >
-      <Image
-        source={{ uri: item.imageUrl }}
-        style={[
-          styles.image,
-          {
-            borderRadius: radius.lg,
-          },
-        ]}
-        defaultSource={require('../../assets/images/placeholder.png')}
-      />
+      <View style={[styles.image, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderRadius: radius.lg,
+            },
+          ]}
+        />
+      </View>
       <View
         style={[
           styles.overlay,
@@ -95,6 +111,7 @@ export function ImageCarousel({ items, onItemPress, autoplayInterval = 5000 }: I
   return (
     <View style={styles.container}>
       <FlatList
+        ref={listRef}
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}

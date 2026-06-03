@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
-import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, View, Pressable, Linking } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable } from 'react-native';
 
 import {
   AppHeader,
@@ -11,41 +10,36 @@ import {
   Container,
 } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
+import type { CarouselItem } from '../../src/components/ImageCarousel';
 import {
   homePosition,
   upcomingMatches,
 } from '../../src/features/mockData';
+import { useSliderStore } from '../../src/features/content/store/sliderStore';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
-
-// Mock carousel data - will be replaced with API data
-const carouselItems = [
-  {
-    id: '1',
-    title: '¡Comienza el Mundial Innova 2024!',
-    imageUrl: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=600&h=300&fit=crop',
-    link: '/fixture',
-  },
-  {
-    id: '2',
-    title: 'Últimas noticias del torneo',
-    imageUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&h=300&fit=crop',
-    link: '/noticias',
-  },
-  {
-    id: '3',
-    title: 'Clasificaciones actualizadas',
-    imageUrl: 'https://images.unsplash.com/photo-1540747913ee8bbf0e19bb8a8368d7932c1449af0?w=600&h=300&fit=crop',
-    link: '/posiciones',
-  },
-];
 
 export default function AppHomeScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const slides = useSliderStore((s) => s.slides);
 
-  const handleCarouselPress = (item: (typeof carouselItems)[0]) => {
+  const carouselItems: CarouselItem[] = slides
+    .filter((s) => s.status === 'active')
+    .sort((a, b) => a.order - b.order)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      imageUrl: s.imageUrl,
+      link: s.button.enabled ? s.button.internalLink ?? s.button.externalLink : undefined,
+    }));
+
+  const handleCarouselPress = (item: CarouselItem) => {
     if (item.link) {
-      router.push(item.link as any);
+      if (item.link.startsWith('http')) {
+        Linking.openURL(item.link);
+      } else {
+        router.push(item.link as any);
+      }
     }
   };
 
@@ -153,8 +147,6 @@ export default function AppHomeScreen() {
   );
 }
 
-
-
 function QuickActionButton({
   icon,
   label,
@@ -197,47 +189,64 @@ function QuickActionButton({
 }
 
 const styles = StyleSheet.create({
-scrollContent: {
-  paddingBottom: 40,
-},
-
-positionGrid: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  gap: 12,
-},
-
-quickActionsContainer: {
-  marginTop: 24,
-  marginBottom: 30,
-},
-
-quickActionsTitle: {
-  fontSize: 20,
-  fontWeight: '700',
-  marginBottom: 16,
-},
-
-actionsGrid: {
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 12,
-  justifyContent: 'space-between',
-},
-
-actionButton: {
-  width: '48%',
-  borderRadius: 18,
-  borderWidth: 1,
-  paddingVertical: 20,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-
-actionLabel: {
-  marginTop: 8,
-  fontSize: 14,
-  fontWeight: '600',
-},
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  positionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  positionCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+  },
+  positionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  positionValue: {
+    marginTop: 6,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  variationValue: {
+    marginTop: 6,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  matchList: {
+    gap: 12,
+  },
+  quickActionsContainer: {
+    marginTop: 24,
+    marginBottom: 30,
+  },
+  quickActionsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    width: '48%',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
 

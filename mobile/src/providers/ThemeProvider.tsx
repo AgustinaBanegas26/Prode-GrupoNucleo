@@ -9,6 +9,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
+import { useBrandingStore } from '../features/content/store/brandingStore';
 import { useThemeStore } from '../store/themeStore';
 import { createTheme, type AppColorScheme, type AppTheme } from '../theme/theme';
 
@@ -19,6 +20,7 @@ type ThemeContextValue = {
   theme: AppTheme;
   isDark: boolean;
   colorScheme: AppColorScheme;
+  resolvedScheme: AppColorScheme;
   themeMode: 'system' | 'light' | 'dark';
   setThemeMode: (mode: 'system' | 'light' | 'dark') => void;
   fontsLoaded: boolean;
@@ -54,6 +56,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeMode = useThemeStore((s) => s.themeMode);
   const setThemeMode = useThemeStore((s) => s.setThemeMode);
   const isHydrated = useThemeStore((s) => s.isHydrated);
+  const branding = useBrandingStore((s) => s.config);
+  const isBrandingHydrated = useBrandingStore((s) => s.isHydrated);
 
   // Step 4: Resolve the actual color scheme based on theme mode
   const colorScheme: AppColorScheme = useMemo(() => {
@@ -64,7 +68,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [themeMode, systemColorScheme]);
 
   // Step 5: Create theme object
-  const theme = useMemo(() => createTheme(colorScheme), [colorScheme]);
+  const theme = useMemo(() => {
+    const base = createTheme(colorScheme);
+    if (!branding?.primaryColor) return base;
+    if (base.colors.primary === branding.primaryColor) return base;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: branding.primaryColor,
+        primaryLight: branding.primaryColor,
+      },
+    } as AppTheme;
+  }, [branding?.primaryColor, colorScheme]);
 
   // Step 6: Setup fonts globally
   useEffect(() => {
@@ -89,6 +105,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       theme,
       isDark: colorScheme === 'dark',
       colorScheme,
+      resolvedScheme: colorScheme,
       themeMode,
       setThemeMode: handleSetThemeMode,
       fontsLoaded,
@@ -97,7 +114,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Show loading screen while fonts are loading
-  if (!fontsLoaded || !isHydrated) {
+  if (!fontsLoaded || !isHydrated || !isBrandingHydrated) {
     return null;
   }
 
