@@ -236,7 +236,8 @@ export function ReportsScreen() {
     try {
       const csv = makeCsv(buildRows.rows);
       const filename = `reporte_${kind.toLowerCase()}_${Date.now()}.csv`;
-      const uri = `${FileSystem.cacheDirectory ?? ''}${filename}`;
+      const baseDir = FileSystem.Paths.cache.uri ?? FileSystem.Paths.document.uri;
+      const uri = `${baseDir}${filename}`;
       await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       log({ action: 'export', module: 'reports', title: `Export CSV (${kind})` });
       await writeAndShare(uri, 'text/csv');
@@ -256,7 +257,8 @@ export function ReportsScreen() {
       const html = makeHtmlPage(`Reporte ${kind}`, htmlTable);
 
       const filename = `reporte_${kind.toLowerCase()}_${Date.now()}.xls`;
-      const uri = `${FileSystem.cacheDirectory ?? ''}${filename}`;
+      const baseDir = FileSystem.Paths.cache.uri ?? FileSystem.Paths.document.uri;
+      const uri = `${baseDir}${filename}`;
       await FileSystem.writeAsStringAsync(uri, html, { encoding: FileSystem.EncodingType.UTF8 });
       log({ action: 'export', module: 'reports', title: `Export Excel (${kind})` });
       await writeAndShare(uri, 'application/vnd.ms-excel');
@@ -360,4 +362,3 @@ const styles = StyleSheet.create({
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radius.lg, ...shadows.sm },
   actionText: { color: '#fff', fontSize: 14, fontWeight: typography.semibold as any },
 });
-

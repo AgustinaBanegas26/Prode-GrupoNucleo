@@ -70,17 +70,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Step 5: Create theme object
   const theme = useMemo(() => {
     const base = createTheme(colorScheme);
-    if (!branding?.primaryColor) return base;
-    if (base.colors.primary === branding.primaryColor) return base;
+    const patch: Partial<Record<keyof AppTheme['colors'], string>> = {};
+
+    if (branding?.primaryColor && base.colors.primary !== branding.primaryColor) {
+      patch.primary = branding.primaryColor;
+      patch.primaryLight = branding.primaryColor;
+    }
+
+    if (!base.isDark && branding?.secondaryColor && base.colors.textSecondary !== branding.secondaryColor) {
+      patch.textSecondary = branding.secondaryColor;
+    }
+
+    if (Object.keys(patch).length === 0) return base;
+
     return {
       ...base,
       colors: {
         ...base.colors,
-        primary: branding.primaryColor,
-        primaryLight: branding.primaryColor,
+        ...patch,
       },
     } as AppTheme;
-  }, [branding?.primaryColor, colorScheme]);
+  }, [branding?.primaryColor, branding?.secondaryColor, colorScheme]);
 
   // Step 6: Setup fonts globally
   useEffect(() => {

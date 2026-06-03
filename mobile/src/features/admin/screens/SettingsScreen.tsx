@@ -25,9 +25,11 @@ export function SettingsScreen() {
       setConfig({
         logoUrl: draft.logoUrl.trim(),
         primaryColor: draft.primaryColor.trim() || '#CC2627',
+        secondaryColor: draft.secondaryColor.trim() || '#5C5C5C',
         appTitle: draft.appTitle.trim(),
         homeHeadline: draft.homeHeadline.trim(),
         homeSubheadline: draft.homeSubheadline.trim(),
+        bannersTitle: draft.bannersTitle.trim() || 'Novedades',
       });
       log({ action: 'update', module: 'branding', title: 'Configuración actualizada' });
       Alert.alert('OK', 'Configuración actualizada');
@@ -82,6 +84,12 @@ export function SettingsScreen() {
             autoCapitalize="none"
           />
           <TextField
+            label="Color secundario"
+            value={draft.secondaryColor}
+            onChangeText={(v) => setDraft((s) => ({ ...s, secondaryColor: v }))}
+            autoCapitalize="none"
+          />
+          <TextField
             label="Título app"
             value={draft.appTitle}
             onChangeText={(v) => setDraft((s) => ({ ...s, appTitle: v }))}
@@ -95,6 +103,11 @@ export function SettingsScreen() {
             label="Subtítulo Home"
             value={draft.homeSubheadline}
             onChangeText={(v) => setDraft((s) => ({ ...s, homeSubheadline: v }))}
+          />
+          <TextField
+            label="Título Banners"
+            value={draft.bannersTitle}
+            onChangeText={(v) => setDraft((s) => ({ ...s, bannersTitle: v }))}
           />
         </View>
 
