@@ -1,147 +1,155 @@
 import { useRouter } from 'expo-router';
-import { FlatList, ScrollView, StyleSheet, Text, View, Pressable, Linking } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import {
-  AppHeader,
-  MatchCard,
-  ImageCarousel,
+  GlassHeader,
+  HeroStatsBanner,
+  SportMatchCard,
+  QuickRankingPodium,
   DashboardSection,
-  Container,
 } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
-import type { CarouselItem } from '../../src/components/ImageCarousel';
 import {
   homePosition,
   upcomingMatches,
+  rankingData,
 } from '../../src/features/mockData';
 import { useSliderStore } from '../../src/features/content/store/sliderStore';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
+import { useAuthStore } from '../../src/store/authStore';
+import { spacing } from '../../src/theme/theme';
 
 export default function AppHomeScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const slides = useSliderStore((s) => s.slides);
+  const session = useAuthStore((s) => s.session);
 
-  const carouselItems: CarouselItem[] = slides
+  const userName = session?.user
+    ? `${session.user.nombre} ${session.user.apellido}`
+    : 'Usuario';
+  const userInitials = session?.user
+    ? `${session.user.nombre[0] ?? ''}${session.user.apellido[0] ?? ''}`
+    : 'U';
+
+  // Tomar la primera imagen del slider como fondo del hero
+  const heroImage = slides
     .filter((s) => s.status === 'active')
-    .sort((a, b) => a.order - b.order)
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      imageUrl: s.imageUrl,
-      link: s.button.enabled ? s.button.internalLink ?? s.button.externalLink : undefined,
-    }));
+    .sort((a, b) => a.order - b.order)[0]?.imageUrl;
 
-  const handleCarouselPress = (item: CarouselItem) => {
-    if (item.link) {
-      if (item.link.startsWith('http')) {
-        Linking.openURL(item.link);
-      } else {
-        router.push(item.link as any);
-      }
-    }
-  };
+  const top3 = rankingData.slice(0, 3);
 
   return (
     <Screen>
-      <AppHeader />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Container>
-          {/* Carousel */}
-          <ImageCarousel items={carouselItems} onItemPress={handleCarouselPress} />
+      <GlassHeader
+        userName={userName}
+        userInitials={userInitials.toUpperCase()}
+        position={homePosition.position}
+        hasUnreadNotifications
+      />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Hero principal */}
+        <View style={styles.heroContainer}>
+          <HeroStatsBanner
+            backgroundImageUrl={heroImage}
+            position={homePosition.position}
+            points={homePosition.points}
+            variation={homePosition.variation}
+            variationDirection="up"
+            remainingMatches={2}
+            tournamentName="Mundial 2026"
+            onViewRankingPress={() => router.push('/(app)/posiciones')}
+          />
+        </View>
 
-          {/* Mi Posición */}
-          <DashboardSection
-            title="Mi posición"
-            icon="trophy"
-            action={{
-              label: 'Ver ranking',
-              onPress: () => router.push('/(app)/posiciones'),
-            }}
-          >
-            <View style={styles.positionGrid}>
-              <View style={styles.positionCard}>
-                <Text style={[styles.positionLabel, { color: theme.colors.textSecondary }]}>
-                  Posición
-                </Text>
-                <Text style={[styles.positionValue, { color: theme.colors.primary }]}>
-                  {homePosition.position}
-                </Text>
-              </View>
-              <View style={styles.positionCard}>
-                <Text style={[styles.positionLabel, { color: theme.colors.textSecondary }]}>
-                  Puntos
-                </Text>
-                <Text style={[styles.positionValue, { color: theme.colors.text }]}>
-                  {homePosition.points}
-                </Text>
-              </View>
-              <View style={styles.positionCard}>
-                <Text style={[styles.positionLabel, { color: theme.colors.textSecondary }]}>
-                  Variación
-                </Text>
-                <Text style={[styles.variationValue, { color: theme.colors.success }]}>
-                  +{homePosition.variation}
-                </Text>
-              </View>
-            </View>
-          </DashboardSection>
-
-          {/* Próximos Partidos */}
-          <DashboardSection
-            title="Próximos partidos"
-            icon="calendar"
-            action={{
-              label: 'Ver fixture',
-              onPress: () => router.push('/(app)/fixture'),
-            }}
-          >
-            <FlatList
-              data={upcomingMatches.slice(0, 2)}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <MatchCard
-                  {...item}
-                  onPress={() =>
-                    router.push({ pathname: '/(app)/details/detalle-partido', params: { matchId: item.id } })
-                  }
-                />
-              )}
-              scrollEnabled={false}
-              contentContainerStyle={styles.matchList}
-            />
-          </DashboardSection>
-
-          {/* Quick Actions */}
-          <View style={styles.quickActionsContainer}>
-            <Text style={[styles.quickActionsTitle, { color: theme.colors.text }]}>
-              Accesos rápidos
+        {/* Próximos Partidos */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Próximos partidos
             </Text>
-            <View style={styles.actionsGrid}>
-              <QuickActionButton
-                icon="chart-line"
-                label="Pronósticos"
-                onPress={() => router.push('/(app)/pronosticos')}
-              />
-              <QuickActionButton
-                icon="account"
-                label="Mi perfil"
-                onPress={() => router.push('/(app)/perfil')}
-              />
-              <QuickActionButton
-                icon="bell"
-                label="Notificaciones"
-                onPress={() => console.log('Notificaciones')}
-              />
-              <QuickActionButton
-                icon="share-variant"
-                label="Compartir"
-                onPress={() => console.log('Compartir')}
-              />
-            </View>
+            <Pressable
+              onPress={() => router.push('/(app)/fixture')}
+              accessibilityRole="button"
+              accessibilityLabel="Ver fixture completo"
+            >
+              <Text style={[styles.sectionLink, { color: theme.colors.primary }]}>
+                Ver fixture →
+              </Text>
+            </Pressable>
           </View>
-        </Container>
+          <FlatList
+            data={upcomingMatches.slice(0, 2)}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <SportMatchCard
+                homeTeam={item.homeTeam}
+                awayTeam={item.awayTeam}
+                homeCode={item.homeCode}
+                awayCode={item.awayCode}
+                date={item.date}
+                time={item.time}
+                group={item.group}
+                phase={item.phase}
+                matchStatus="upcoming"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/details/detalle-partido',
+                    params: { matchId: item.id },
+                  })
+                }
+              />
+            )}
+            scrollEnabled={false}
+            contentContainerStyle={styles.matchList}
+          />
+        </View>
+
+        {/* Top 3 Podio */}
+        <View style={styles.podiumSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Ranking rápido
+            </Text>
+          </View>
+          <QuickRankingPodium
+            top3={top3}
+            onViewAllPress={() => router.push('/(app)/posiciones')}
+          />
+        </View>
+
+        {/* Accesos rápidos */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Accesos rápidos
+          </Text>
+          <View style={styles.actionsGrid}>
+            <QuickActionButton
+              icon="chart-line"
+              label="Pronósticos"
+              onPress={() => router.push('/(app)/pronosticos')}
+            />
+            <QuickActionButton
+              icon="account"
+              label="Mi perfil"
+              onPress={() => router.push('/(app)/perfil')}
+            />
+            <QuickActionButton
+              icon="bell"
+              label="Notificaciones"
+              onPress={() => {}}
+            />
+            <QuickActionButton
+              icon="share-variant"
+              label="Compartir"
+              onPress={() => {}}
+            />
+          </View>
+        </View>
       </ScrollView>
     </Screen>
   );
@@ -157,96 +165,74 @@ function QuickActionButton({
   onPress: () => void;
 }) {
   const { theme } = useAppTheme();
-
   return (
     <Pressable
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.actionButton,
         {
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
+          opacity: pressed ? 0.85 : 1,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
-      <MaterialCommunityIcons
-        name={icon as any}
-        size={24}
-        color={theme.colors.primary}
-      />
-      <Text
-        style={[
-          styles.actionLabel,
-          {
-            color: theme.colors.text,
-          },
-        ]}
-      >
-        {label}
-      </Text>
+      <MaterialCommunityIcons name={icon as any} size={26} color={theme.colors.primary} />
+      <Text style={[styles.actionLabel, { color: theme.colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
-  positionGrid: {
+  heroContainer: {
+    paddingTop: spacing.lg,
+  },
+  section: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing['2xl'],
+  },
+  podiumSection: {
+    marginBottom: spacing['2xl'],
+  },
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  positionCard: {
-    flex: 1,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-  },
-  positionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  positionValue: {
-    marginTop: 6,
-    fontSize: 22,
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: '800',
   },
-  variationValue: {
-    marginTop: 6,
-    fontSize: 22,
-    fontWeight: '800',
+  sectionLink: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   matchList: {
-    gap: 12,
-  },
-  quickActionsContainer: {
-    marginTop: 24,
-    marginBottom: 30,
-  },
-  quickActionsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
+    gap: 0,
   },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
   actionButton: {
-    width: '48%',
-    borderRadius: 18,
+    width: '47%',
+    borderRadius: 20,
     borderWidth: 1,
-    paddingVertical: 20,
+    paddingVertical: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
   },
   actionLabel: {
-    marginTop: 8,
     fontSize: 14,
     fontWeight: '600',
   },
 });
-

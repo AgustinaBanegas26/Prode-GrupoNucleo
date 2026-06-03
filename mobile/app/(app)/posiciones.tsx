@@ -1,40 +1,112 @@
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, RankingCard } from '../../src/components';
+import { GlassHeader, PremiumRankingCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
 import { rankingData } from '../../src/features/mockData';
+import { useAppTheme } from '../../src/providers/ThemeProvider';
+import { useAuthStore } from '../../src/store/authStore';
+import { radius, shadows, spacing } from '../../src/theme/theme';
 
 export default function RankingsScreen() {
+  const { theme } = useAppTheme();
   const [selectedTab, setSelectedTab] = useState<'General' | 'Semanal'>('General');
+  const session = useAuthStore((s) => s.session);
+
+  const userName = session?.user
+    ? `${session.user.nombre} ${session.user.apellido}`
+    : 'Usuario';
+  const userInitials = session?.user
+    ? `${session.user.nombre[0] ?? ''}${session.user.apellido[0] ?? ''}`
+    : 'U';
+
+  const currentItem = rankingData.find((r) => r.isCurrent);
+
+  // Stagger animation para las tarjetas
+  const staggerAnims = useRef(rankingData.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    const animations = staggerAnims.map((anim, i) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 320,
+        delay: i * 45,
+        useNativeDriver: true,
+      })
+    );
+    Animated.stagger(45, animations).start();
+  }, [selectedTab]);
 
   return (
     <Screen style={styles.screen}>
-      <AppHeader />
+      <GlassHeader
+        userName={userName}
+        userInitials={userInitials.toUpperCase()}
+        position={currentItem?.position ?? 0}
+      />
+
       <View style={styles.container}>
-        <Text style={styles.pageTitle}>Posiciones</Text>
-        <View style={styles.tabBar}>
-          {['General', 'Semanal'].map((tab) => (
-            <Text
-              key={tab}
-              onPress={() => setSelectedTab(tab as 'General' | 'Semanal')}
-              style={[styles.tabItem, selectedTab === tab && styles.tabItemActive]}
-            >
-              {tab}
-            </Text>
-          ))}
+        {/* Título */}
+        <Text style={[styles.pageTitle, { color: theme.colors.text }]}>Posiciones</Text>
+
+        {/* Tabs */}
+        <View style={[styles.tabBar, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+          {(['General', 'Semanal'] as const).map((tab) => {
+            const isActive = selectedTab === tab;
+            return (
+              <Pressable
+                key={tab}
+                onPress={() => setSelectedTab(tab)}
+                style={[
+                  styles.tabItem,
+                  isActive && { backgroundColor: theme.colors.primary, ...shadows.glow },
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: isActive ? '#fff' : theme.colors.textSecondary },
+                  ]}
+                >
+                  {tab}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
+
+        {/* Cabecera de tabla */}
         <View style={styles.tableHeader}>
-          <Text style={styles.tableHeaderText}>#</Text>
-          <Text style={[styles.tableHeaderText, styles.userColumn]}>Usuario</Text>
-          <Text style={styles.tableHeaderText}>Pts</Text>
-          <Text style={styles.tableHeaderText}>PJ</Text>
-          <Text style={styles.tableHeaderText}>DG</Text>
+          <Text style={[styles.tableHeaderText, { color: theme.colors.muted }]}>#</Text>
+          <Text style={[styles.tableHeaderText, styles.userCol, { color: theme.colors.muted }]}>Usuario</Text>
+          <Text style={[styles.tableHeaderText, { color: theme.colors.muted }]}>Pts</Text>
+          <Text style={[styles.tableHeaderText, { color: theme.colors.muted }]}>PJ</Text>
+          <Text style={[styles.tableHeaderText, { color: theme.colors.muted }]}>DG</Text>
         </View>
+
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
-          {rankingData.map((item) => (
-            <RankingCard key={item.id} item={item} />
-          ))}
+          {rankingData.map((item, index) => {
+            const anim = staggerAnims[index];
+            return (
+              <Animated.View
+                key={item.id}
+                style={{
+                  opacity: anim,
+                  transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+                }}
+              >
+                <PremiumRankingCard
+                  item={{
+                    ...item,
+                    variation: item.diff,
+                    variationDirection: item.diff > 0 ? 'up' : item.diff < 0 ? 'down' : 'neutral',
+                  }}
+                />
+              </Animated.View>
+            );
+          })}
         </ScrollView>
       </View>
     </Screen>
@@ -47,47 +119,49 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 6,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
   pageTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
-    marginBottom: 18,
+    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
   },
   tabBar: {
     flexDirection: 'row',
-    marginBottom: 18,
+    borderRadius: radius.xl,
+    padding: 4,
+    marginBottom: spacing.lg,
+    alignSelf: 'flex-start',
   },
   tabItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingVertical: 9,
+    paddingHorizontal: 22,
     borderRadius: 18,
-    backgroundColor: '#11182710',
-    color: '#5C5C5C',
-    fontWeight: '700',
-    marginRight: 12,
   },
-  tabItemActive: {
-    backgroundColor: '#CC2627',
-    color: '#fff',
+  tabText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
-    paddingLeft: 10,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   tableHeaderText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#5C5C5C',
+    textAlign: 'right',
   },
-  userColumn: {
+  userCol: {
     flex: 3,
+    textAlign: 'left',
+    paddingLeft: 48,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
 });
