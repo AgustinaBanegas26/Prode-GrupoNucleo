@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -15,25 +16,24 @@ import { GlassHeader } from '../../../components/GlassHeader';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { useAuth } from '../../../providers/AuthProvider';
 import { radius, shadows, spacing } from '../../../theme/theme';
-import { type NewsItem, useNewsStore } from '../store/newsStore';
+import { usePublishedNews, useNewsRealtime, type NewsRow } from '../api/news';
 
-const formatDate = (ts: number) =>
-  new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
 
 export function NewsListScreen() {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const items = useNewsStore((s) => s.items);
   const { user } = useAuth();
-  const [selected, setSelected] = useState<NewsItem | null>(null);
+  const [selected, setSelected] = useState<NewsRow | null>(null);
+
+  // Activa realtime
+  useNewsRealtime();
+
+  const { data: published, isLoading, isError } = usePublishedNews();
 
   const fullName = user?.nombre ?? 'Usuario';
   const initials = fullName.slice(0, 2).toUpperCase();
-
-  const published = useMemo(
-    () => items.filter((n) => n.status === 'published').sort((a, b) => b.date - a.date),
-    [items],
-  );
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -46,14 +46,25 @@ export function NewsListScreen() {
         {/* Page title */}
         <View style={styles.titleRow}>
           <Text style={[styles.pageTitle, { color: theme.colors.text }]}>Noticias</Text>
-          {published.length > 0 && (
+          {published && published.length > 0 && (
             <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
               <Text style={styles.countBadgeText}>{published.length}</Text>
             </View>
           )}
         </View>
 
-        {published.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        ) : isError ? (
+          <View style={styles.centerState}>
+            <Feather name="alert-circle" size={40} color={theme.colors.muted} />
+            <Text style={[styles.emptySubtitle, { color: theme.colors.muted }]}>
+              Error al cargar noticias.
+            </Text>
+          </View>
+        ) : !published || published.length === 0 ? (
           <View style={styles.emptyBox}>
             <Feather name="inbox" size={44} color={theme.colors.muted} />
             <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Sin noticias por ahora</Text>
@@ -76,8 +87,9 @@ export function NewsListScreen() {
                 accessibilityLabel={published[0].title}
               >
                 <View style={styles.featuredImage}>
-                  <Image source={{ uri: published[0].imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  {/* Gradient overlay */}
+                  {published[0].image_url ? (
+                    <Image source={{ uri: published[0].image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : null}
                   <View style={styles.featuredOverlay} />
                   <View style={styles.featuredBadge}>
                     <Feather name="star" size={10} color="#fff" />
@@ -86,7 +98,7 @@ export function NewsListScreen() {
                 </View>
                 <View style={styles.featuredBody}>
                   <Text style={[styles.featuredDate, { color: theme.colors.muted }]}>
-                    {formatDate(published[0].date)}
+                    {formatDate(published[0].created_at)}
                   </Text>
                   <Text style={[styles.featuredTitle, { color: theme.colors.text }]} numberOfLines={2}>
                     {published[0].title}
@@ -116,10 +128,12 @@ export function NewsListScreen() {
                 accessibilityLabel={n.title}
               >
                 <View style={styles.cardImage}>
-                  <Image source={{ uri: n.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  {n.image_url ? (
+                    <Image source={{ uri: n.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : null}
                 </View>
                 <View style={styles.cardBody}>
-                  <Text style={[styles.cardDate, { color: theme.colors.muted }]}>{formatDate(n.date)}</Text>
+                  <Text style={[styles.cardDate, { color: theme.colors.muted }]}>{formatDate(n.created_at)}</Text>
                   <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>{n.title}</Text>
                   <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={2}>{n.description}</Text>
                 </View>
@@ -138,10 +152,9 @@ export function NewsListScreen() {
       >
         <View style={[styles.modalBackdrop, { backgroundColor: theme.colors.overlay }]}>
           <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            {/* Image */}
-            {selected?.imageUrl ? (
+            {selected?.image_url ? (
               <View style={styles.modalImage}>
-                <Image source={{ uri: selected.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                <Image source={{ uri: selected.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 <Pressable
                   style={[styles.modalCloseBtn, { top: insets.top + 12 }]}
                   onPress={() => setSelected(null)}
@@ -160,7 +173,7 @@ export function NewsListScreen() {
             )}
             <ScrollView contentContainerStyle={styles.modalBody}>
               <Text style={[styles.modalDate, { color: theme.colors.muted }]}>
-                {selected ? formatDate(selected.date) : ''}
+                {selected ? formatDate(selected.created_at) : ''}
               </Text>
               <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
                 {selected?.title ?? ''}
@@ -179,20 +192,15 @@ export function NewsListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
-  },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   pageTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
   countBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   countBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  centerState: { alignItems: 'center', paddingTop: 60, gap: spacing.md },
   emptyBox: { alignItems: 'center', paddingTop: 60, gap: spacing.md },
   emptyTitle: { fontSize: 17, fontWeight: '700' },
   emptySubtitle: { fontSize: 13 },
   list: { gap: spacing.md },
-  // Featured card
   featuredCard: { borderRadius: radius['2xl'], borderWidth: 1, overflow: 'hidden', marginBottom: spacing.sm },
   featuredImage: { height: 200, position: 'relative' },
   featuredOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(0,0,0,0.35)' },
@@ -204,14 +212,12 @@ const styles = StyleSheet.create({
   featuredDesc: { fontSize: 13, lineHeight: 19 },
   readMore: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
   readMoreText: { fontSize: 13, fontWeight: '700' },
-  // Normal card
   card: { borderRadius: radius.xl, borderWidth: 1, overflow: 'hidden', flexDirection: 'row' },
   cardImage: { width: 100, height: 100, backgroundColor: '#1a1a1a' },
   cardBody: { flex: 1, padding: spacing.md, gap: 4 },
   cardDate: { fontSize: 11, fontWeight: '500' },
   cardTitle: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
   cardDesc: { fontSize: 12, lineHeight: 17 },
-  // Modal
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   modalCard: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '90%', overflow: 'hidden' },
   modalImage: { height: 220, position: 'relative' },

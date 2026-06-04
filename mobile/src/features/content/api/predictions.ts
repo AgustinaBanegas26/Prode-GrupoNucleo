@@ -1,0 +1,111 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { supabase } from '../../../lib/supabase';
+import { logActivity } from '../../admin/services/activityLogs';
+
+// ── Tipos ─────────────────────────────────────────────────────
+
+export type PredictionRow = {
+  id: string;
+  user_id: string;
+  cliente_id: string;
+  fixture_id: number;
+  pick_winner: 'home' | 'draw' | 'away';
+  score_home: number | null;
+  score_away: number | null;
+  overtime: boolean;
+  penalties: boolean;
+  points_earned: number;
+  status: 'pending' | 'correct' | 'incorrect' | 'partial';
+  created_at: string;
+  updated_at: string;
+};
+
+export type UpsertPredictionInput = {
+  user_id: string;
+  cliente_id: string;
+  fixture_id: number;
+  pick_winner: 'home' | 'draw' | 'away';
+  score_home: number | null;
+  score_away: number | null;
+  overtime?: boolean;
+  penalties?: boolean;
+};
+
+// ── Query keys ────────────────────────────────────────────────
+
+export const predictionsQueryKey = (clienteId: string) =>
+  ['predictions', clienteId] as const;
+
+// ── Hooks ─────────────────────────────────────────────────────
+
+export function usePredictions(clienteId: string | undefined) {
+  return useQuery({
+    queryKey: predictionsQueryKey(clienteId ?? ''),
+    enabled: !!clienteId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('predictions')
+        .select('*')
+        .eq('cliente_id', clienteId!);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as PredictionRow[];
+    },
+  });
+}
+
+export function useUpsertPrediction() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpsertPredictionInput) => {
+      // Verificar si ya existe un pronóstico para este usuario + partido
+      const { data: existing } = await supabase
+        .from('predictions')
+        .select('id')
+        .eq('user_id', input.user_id)
+        .eq('fixture_id', input.fixture_id)
+        .maybeSingle();
+
+      const isUpdate = !!existing?.id;
+
+      const payload: any = {
+        user_id: input.user_id,
+        cliente_id: input.cliente_id,
+        fixture_id: input.fixture_id,
+        pick_winner: input.pick_winner,
+        score_home: input.score_home,
+        score_away: input.score_away,
+        overtime: input.overtime ?? false,
+        penalties: input.penalties ?? false,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isUpdate) {
+        const { error } = await supabase
+          .from('predictions')
+          .update(payload)
+          .eq('id', existing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from('predictions')
+          .insert({ ...payload, status: 'pending', points_earned: 0 });
+        if (error) throw new Error(error.message);
+      }
+
+      // Log de actividad
+      await logActivity({
+        user_id: input.user_id,
+        cliente_id: input.cliente_id,
+        action: isUpdate ? 'UPDATE_PREDICTION' : 'CREATE_PREDICTION',
+        detail: `fixture_id: ${input.fixture_id}, pick: ${input.pick_winner}`,
+      });
+
+      return { isUpdate };
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: predictionsQueryKey(variables.cliente_id) });
+    },
+  });
+}
