@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing['2xl'],
   },
   bgImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   content: {
     flex: 1,

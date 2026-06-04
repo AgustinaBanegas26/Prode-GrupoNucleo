@@ -27,6 +27,24 @@ function getPasswordResetRedirectUrl(): string {
   return Linking.createURL('reset-password');
 }
 
+async function ensureAuthUserExists(email: string): Promise<void> {
+  // Importante: la app NO tiene service_role, por lo que no puede crear usuarios en auth.users.
+  // Este hook intenta llamar a una Edge Function (opcional) que crea/sincroniza el usuario en Auth.
+  // Si no está desplegada, el flujo sigue y Supabase NO enviará mail si el usuario no existe en auth.users.
+  try {
+    const { data, error } = await supabase.functions.invoke('ensure-auth-user', {
+      body: { email },
+    });
+    if (error) {
+      console.warn('[PasswordRecovery] ensure-auth-user falló:', error.message);
+      return;
+    }
+    console.log('[PasswordRecovery] ensure-auth-user ok:', data);
+  } catch (e) {
+    console.warn('[PasswordRecovery] ensure-auth-user excepción:', e);
+  }
+}
+
 function mapSupabaseAuthError(message: string): PasswordRecoveryError {
   const lower = message.toLowerCase();
 
@@ -98,26 +116,70 @@ export async function sendPasswordResetEmail(email: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
   const redirectTo = getPasswordResetRedirectUrl();
 
+  console.log('[PasswordRecovery] sendPasswordResetEmail()', {
+    email: normalizedEmail,
+    redirectTo,
+  });
+
+  // Paso clave: si el proyecto usa login legacy (admins/clientes), es probable que no exista el user en auth.users
+  // y Supabase no enviará mail (aunque resetPasswordForEmail devuelva "success" para evitar enumeración).
+  await ensureAuthUserExists(normalizedEmail);
+
   const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo,
   });
 
   if (error) {
+    console.error('[PasswordRecovery] resetPasswordForEmail error:', error);
     throw mapSupabaseAuthError(error.message);
   }
+
+  console.log(
+    '[PasswordRecovery] resetPasswordForEmail: request enviada (si el email existe en auth.users, llegará el correo).',
+  );
 }
 
 /**
  * Establece la sesión de recuperación a partir del deep link del correo.
  */
 export async function establishRecoverySessionFromUrl(url: string): Promise<boolean> {
+  console.log('[PasswordRecovery] establishRecoverySessionFromUrl() url:', url);
   const params = parseUrlParams(url);
   const accessToken = params.access_token;
   const refreshToken = params.refresh_token;
   const type = params.type;
+  const code = params.code;
+  const tokenHash = params.token_hash;
 
   if (type && type !== 'recovery') {
     throw new PasswordRecoveryError('Enlace de recuperación inválido.', 'invalid_link');
+  }
+
+  // Flujos posibles de Supabase:
+  // 1) Implicit: #access_token=...&refresh_token=...
+  // 2) PKCE: ?code=... (recomendado en SDKs nuevos) → exchangeCodeForSession
+  // 3) token_hash (según template/config) → verifyOtp
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.error('[PasswordRecovery] exchangeCodeForSession error:', error);
+      throw mapSupabaseAuthError(error.message);
+    }
+    console.log('[PasswordRecovery] exchangeCodeForSession ok');
+    return true;
+  }
+
+  if (tokenHash) {
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'recovery',
+      token_hash: tokenHash,
+    });
+    if (error) {
+      console.error('[PasswordRecovery] verifyOtp error:', error);
+      throw mapSupabaseAuthError(error.message);
+    }
+    console.log('[PasswordRecovery] verifyOtp ok');
+    return true;
   }
 
   if (!accessToken || !refreshToken) {
@@ -130,9 +192,11 @@ export async function establishRecoverySessionFromUrl(url: string): Promise<bool
   });
 
   if (error) {
+    console.error('[PasswordRecovery] setSession error:', error);
     throw mapSupabaseAuthError(error.message);
   }
 
+  console.log('[PasswordRecovery] setSession ok');
   return true;
 }
 
@@ -142,6 +206,7 @@ export async function establishRecoverySessionFromUrl(url: string): Promise<bool
 export async function hasActiveRecoverySession(): Promise<boolean> {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
+    console.error('[PasswordRecovery] getSession error:', error);
     throw mapSupabaseAuthError(error.message);
   }
   return Boolean(data.session);
@@ -153,6 +218,7 @@ export async function hasActiveRecoverySession(): Promise<boolean> {
 export async function updatePassword(newPassword: string): Promise<void> {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
+    console.error('[PasswordRecovery] getSession (updatePassword) error:', sessionError);
     throw mapSupabaseAuthError(sessionError.message);
   }
   if (!sessionData.session) {
@@ -164,9 +230,11 @@ export async function updatePassword(newPassword: string): Promise<void> {
 
   const { data: userData } = await supabase.auth.getUser();
   const userEmail = userData.user?.email?.toLowerCase();
+  console.log('[PasswordRecovery] updatePassword(): user email:', userEmail);
 
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) {
+    console.error('[PasswordRecovery] updateUser(password) error:', error);
     throw mapSupabaseAuthError(error.message);
   }
 
@@ -231,13 +299,13 @@ export function subscribeToPasswordRecoveryLinks(
   onRecoveryUrl: (url: string) => void,
 ): () => void {
   const subscription = Linking.addEventListener('url', ({ url }) => {
-    if (url.includes('type=recovery') || url.includes('access_token')) {
+    if (url.includes('type=recovery') || url.includes('access_token') || url.includes('code=')) {
       onRecoveryUrl(url);
     }
   });
 
   Linking.getInitialURL().then((url) => {
-    if (url && (url.includes('type=recovery') || url.includes('access_token'))) {
+    if (url && (url.includes('type=recovery') || url.includes('access_token') || url.includes('code='))) {
       onRecoveryUrl(url);
     }
   });
