@@ -9,4 +9,3 @@
 const { startSyncCron } = require('../services/matchSync');
 
 startSyncCron();
-

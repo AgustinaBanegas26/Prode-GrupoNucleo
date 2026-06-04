@@ -5,7 +5,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader } from '../../../src/components/AppHeader';
 import { Button } from '../../../src/components/Button';
 import { Screen } from '../../../src/components/Screen';
-import { getMatchById, makeMatchLabel } from '../../../src/features/mockData';
+import { useMatchResults } from '../../../src/hooks/useMatchResults';
+import { toMatchItemFromDb } from '../../../src/features/matchesAdapter';
 import { useAppTheme } from '../../../src/providers/ThemeProvider';
 
 const resultOptions = ['1-0', '2-0', '2-1', '1-1'];
@@ -16,13 +17,31 @@ type TabOption = typeof tabs[number];
 export default function MatchDetailsScreen() {
   const { theme } = useAppTheme();
   const params = useLocalSearchParams<{ matchId?: string }>();
-  const match = useMemo(() => (params.matchId ? getMatchById(params.matchId) : undefined), [params.matchId]);
+  const { matches: dbMatches, loading } = useMatchResults();
+
+  const match = useMemo(() => {
+    if (!params.matchId) return undefined;
+    const numericId = Number(params.matchId);
+    const found = (dbMatches ?? []).find((m: any) => m.fixture_id === numericId);
+    return found ? toMatchItemFromDb(found) : undefined;
+  }, [dbMatches, params.matchId]);
   const [selectedTab, setSelectedTab] = useState<TabOption>('Pronóstico');
   const [winner, setWinner] = useState<'local' | 'draw' | 'away'>('local');
   const [score, setScore] = useState('2-1');
   const [qualified, setQualified] = useState(false);
   const [overtime, setOvertime] = useState(false);
   const [penalties, setPenalties] = useState(false);
+
+  if (loading && !match) {
+    return (
+      <Screen>
+        <AppHeader />
+        <View style={styles.notFoundContainer}>
+          <Text style={[styles.notFoundText, { color: theme.colors.text }]}>Cargando partido...</Text>
+        </View>
+      </Screen>
+    );
+  }
 
   if (!match) {
     return (
