@@ -8,6 +8,13 @@ import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 
+const PUBLIC_AUTH_ROUTES = new Set([
+  'login',
+  'forgot-password',
+  'reset-password',
+  'first-access',
+]);
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
@@ -18,27 +25,43 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (loading) return;
 
     const root = segments[0];
+    const authRoute = segments[1];
     const inAuthGroup = root === '(auth)';
     const inAppGroup = root === '(app)';
     const inAdminGroup = root === '(admin)';
 
-    // Not logged in — redirect to login if trying to access protected routes
     if (!user && (inAppGroup || inAdminGroup)) {
       router.replace('/(auth)/login');
       return;
     }
 
-    // Logged in — redirect away from auth screens
-    if (user && (inAuthGroup || !root)) {
-      if (user.role === 'admin') {
-        router.replace('/(admin)');
-      } else {
-        router.replace('/(app)');
+    if (user?.mustChangePassword) {
+      if (authRoute !== 'force-change-password') {
+        router.replace('/(auth)/force-change-password');
       }
       return;
     }
 
-    // Admin trying to access user app — redirect to admin panel
+    if (user && (inAuthGroup || !root)) {
+      const isPublicAuthRoute = authRoute ? PUBLIC_AUTH_ROUTES.has(authRoute) : false;
+      if (!isPublicAuthRoute) {
+        if (user.role === 'admin') {
+          router.replace('/(admin)');
+        } else {
+          router.replace('/(app)');
+        }
+        return;
+      }
+      if (isPublicAuthRoute) {
+        if (user.role === 'admin') {
+          router.replace('/(admin)');
+        } else {
+          router.replace('/(app)');
+        }
+      }
+      return;
+    }
+
     if (user && user.role === 'admin' && inAppGroup) {
       router.replace('/(admin)');
       return;

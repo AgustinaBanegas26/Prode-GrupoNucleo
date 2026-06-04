@@ -5,8 +5,10 @@
 CREATE TABLE IF NOT EXISTS admins (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     usuario VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE,
     password_hash VARCHAR(255) NULL, -- Set to NULL initially since they must configure it on first login
     primer_login BOOLEAN DEFAULT TRUE NOT NULL,
+    must_change_password BOOLEAN DEFAULT TRUE NOT NULL,
     habilitado BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
