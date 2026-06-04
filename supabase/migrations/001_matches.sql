@@ -1,4 +1,6 @@
-create table if not exists matches (
+-- Matches (fixture/resultados) + índices + Realtime
+
+create table if not exists public.matches (
   fixture_id    int primary key,
   home_team     text not null,
   away_team     text not null,
@@ -14,9 +16,19 @@ create table if not exists matches (
 );
 
 -- Índices útiles
-create index if not exists matches_status_idx on matches(status);
-create index if not exists matches_date_idx on matches(match_date);
+create index if not exists matches_status_idx on public.matches(status);
+create index if not exists matches_date_idx on public.matches(match_date);
 
 -- Habilitar Realtime
-alter publication supabase_realtime add table matches;
-
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'matches'
+  ) then
+    alter publication supabase_realtime add table public.matches;
+  end if;
+end $$;

@@ -152,9 +152,13 @@ export default function ForceChangePasswordScreen() {
                   placeholderTextColor={theme.colors.placeholder}
                   secureTextEntry={!showPass}
                   autoCapitalize="none"
-                  style={{ flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: 0,
-                    // @ts-ignore
-                    outlineStyle: 'none' }}
+                  style={{
+                    flex: 1,
+                    color: theme.colors.text,
+                    fontSize: 15,
+                    paddingVertical: 0,
+                    outlineStyle: 'none' as any,
+                  }}
                 />
                 <Pressable onPress={() => setShowPass(v => !v)} hitSlop={12}>
                   <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />
@@ -189,9 +193,13 @@ export default function ForceChangePasswordScreen() {
                   placeholderTextColor={theme.colors.placeholder}
                   secureTextEntry={!showConfirm}
                   autoCapitalize="none"
-                  style={{ flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: 0,
-                    // @ts-ignore
-                    outlineStyle: 'none' }}
+                  style={{
+                    flex: 1,
+                    color: theme.colors.text,
+                    fontSize: 15,
+                    paddingVertical: 0,
+                    outlineStyle: 'none' as any,
+                  }}
                 />
                 <Pressable onPress={() => setShowConfirm(v => !v)} hitSlop={12}>
                   <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />

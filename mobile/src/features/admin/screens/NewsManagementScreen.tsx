@@ -1,11 +1,23 @@
 import React, { useMemo, useState } from 'react';
-import { View, ScrollView, Text, StyleSheet, Pressable, FlatList, Alert, Modal, Image, TextInput } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import { Button } from '../../../components/Button';
 import { TextField } from '../../../components/TextField';
+import { AdminScreenHeader } from '../../../components/AdminScreenHeader';
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { spacing, radius, shadows, typography } from '../../../theme/theme';
+import { radius, shadows, spacing, typography } from '../../../theme/theme';
 import { makeEmptyNews, type NewsItem, useNewsStore } from '../../content/store/newsStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 
@@ -19,33 +31,39 @@ export function NewsManagementScreen() {
   const toggleStatus = useNewsStore((s) => s.toggleStatus);
   const log = useAdminActivityStore((s) => s.log);
 
-  const [query, setQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(makeEmptyNews());
+  const [form, setForm] = useState<NewsItem>(makeEmptyNews() as unknown as NewsItem);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items
-      .filter((n) => (!q ? true : `${n.title} ${n.description}`.toLowerCase().includes(q)))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [items, query]);
+  const sorted = useMemo(
+    () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+    [items],
+  );
 
   const openCreate = () => {
-    setForm(makeEmptyNews());
+    setForm(makeEmptyNews() as unknown as NewsItem);
     setModalVisible(true);
   };
 
   const openEdit = (n: NewsItem) => {
-    setForm({
-      id: n.id,
-      title: n.title,
-      imageUrl: n.imageUrl,
-      description: n.description,
-      date: n.date,
-      status: n.status,
-    });
+    setForm({ ...n });
     setModalVisible(true);
+  };
+
+  const pickImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a la galería.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.85,
+    });
+    if (res.canceled) return;
+    const uri = res.assets?.[0]?.uri;
+    if (uri) setForm((s) => ({ ...s, imageUrl: uri }));
   };
 
   const handleSave = () => {
@@ -53,19 +71,20 @@ export function NewsManagementScreen() {
       Alert.alert('Error', 'Completá Título y Descripción.');
       return;
     }
-    if (!form.imageUrl.trim()) {
-      Alert.alert('Error', 'Completá Imagen (URL).');
+    if (!form.imageUrl) {
+      Alert.alert('Error', 'Seleccioná una imagen.');
       return;
     }
-
     const existed = items.some((n) => n.id === form.id);
     setSaving(true);
     try {
       upsert({
-        ...form,
+        id: form.id,
         title: form.title.trim(),
         description: form.description.trim(),
-        imageUrl: form.imageUrl.trim(),
+        imageUrl: form.imageUrl,
+        date: form.date,
+        status: form.status,
       });
       log({
         action: existed ? 'update' : 'create',
@@ -94,54 +113,86 @@ export function NewsManagementScreen() {
   };
 
   const renderItem = ({ item }: { item: NewsItem }) => (
-    <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+        shadows.sm,
+      ]}
+    >
+      {/* Preview image */}
       <View style={styles.preview}>
-        <View style={[styles.previewImage, { backgroundColor: theme.colors.surfaceAlt }]}>
-          <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} />
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }]}>
+            <MaterialCommunityIcons name="image-outline" size={32} color={theme.colors.muted} />
+          </View>
+        )}
+        {item.status !== 'published' && (
+          <View style={[styles.previewMask, { backgroundColor: theme.colors.overlay }]} />
+        )}
+        <View style={[styles.statusPill, { backgroundColor: item.status === 'published' ? theme.colors.success : theme.colors.warning }]}>
+          <Text style={styles.statusPillText}>{item.status === 'published' ? 'Publicada' : 'Borrador'}</Text>
         </View>
-        {item.status !== 'published' && <View style={[styles.previewMask, { backgroundColor: theme.colors.overlay }]} />}
       </View>
 
+      {/* Content */}
       <View style={styles.body}>
-        <View style={styles.headerRow}>
-          <View style={styles.titleCol}>
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={[styles.cardMeta, { color: theme.colors.textSecondary }]}>
-              {formatDate(item.date)} · {item.status === 'published' ? 'Publicada' : 'Borrador'}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              toggleStatus(item.id);
-              log({
-                action: 'toggle',
-                module: 'news',
-                title: 'Estado de noticia',
-                detail: `${item.title} · ${item.status === 'published' ? 'Publicada → Borrador' : 'Borrador → Publicada'}`,
-              });
-            }}
-            style={[
-              styles.iconBtn,
-              { backgroundColor: item.status === 'published' ? theme.colors.success : theme.colors.warning },
-            ]}
-          >
-            <MaterialCommunityIcons name={item.status === 'published' ? 'eye' : 'eye-off'} size={16} color="#fff" />
-          </Pressable>
-        </View>
-
-        <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={3}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={[styles.cardMeta, { color: theme.colors.textSecondary }]}>
+          {formatDate(item.date)}
+        </Text>
+        <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={2}>
           {item.description}
         </Text>
 
         <View style={styles.actionsRow}>
-          <Pressable onPress={() => openEdit(item)} style={[styles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}>
-            <MaterialCommunityIcons name="pencil" size={16} color={theme.colors.primary} />
+          <Pressable
+            onPress={() => openEdit(item)}
+            style={[styles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}
+          >
+            <MaterialCommunityIcons name="pencil" size={15} color={theme.colors.primary} />
             <Text style={[styles.actionText, { color: theme.colors.primary }]}>Editar</Text>
           </Pressable>
-          <Pressable onPress={() => confirmDelete(item)} style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceAlt }]}>
-            <MaterialCommunityIcons name="delete" size={16} color={theme.colors.error} />
+
+          <Pressable
+            onPress={() => {
+              toggleStatus(item.id);
+              log({ action: 'toggle', module: 'news', title: 'Estado noticia', detail: item.title });
+            }}
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor:
+                  item.status === 'published'
+                    ? 'rgba(255,152,0,0.12)'
+                    : 'rgba(76,175,80,0.12)',
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={item.status === 'published' ? 'eye-off' : 'eye'}
+              size={15}
+              color={item.status === 'published' ? theme.colors.warning : theme.colors.success}
+            />
+            <Text
+              style={[
+                styles.actionText,
+                { color: item.status === 'published' ? theme.colors.warning : theme.colors.success },
+              ]}
+            >
+              {item.status === 'published' ? 'Despublicar' : 'Publicar'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => confirmDelete(item)}
+            style={[styles.actionBtn, { backgroundColor: 'rgba(244,67,54,0.10)' }]}
+          >
+            <MaterialCommunityIcons name="delete" size={15} color={theme.colors.error} />
             <Text style={[styles.actionText, { color: theme.colors.error }]}>Eliminar</Text>
           </Pressable>
         </View>
@@ -150,148 +201,187 @@ export function NewsManagementScreen() {
   );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.content}>
-        <View style={styles.screenHeader}>
-          <MaterialCommunityIcons name="newspaper-variant" size={32} color={theme.colors.primary} />
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Noticias</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>{filtered.length} items</Text>
-          </View>
-          <Pressable onPress={openCreate} style={[styles.addButton, { backgroundColor: theme.colors.primary }]}>
-            <MaterialCommunityIcons name="plus" size={18} color="#fff" />
-            <Text style={styles.addButtonText}>Nueva</Text>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <AdminScreenHeader
+        title="Noticias"
+        subtitle={`${items.length} artículos · ${items.filter((n) => n.status === 'published').length} publicados`}
+        rightElement={
+          <Pressable
+            onPress={openCreate}
+            style={[styles.addBtn, { backgroundColor: theme.colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Nueva noticia"
+          >
+            <MaterialCommunityIcons name="plus" size={16} color="#fff" />
+            <Text style={styles.addBtnText}>Nueva</Text>
           </Pressable>
-        </View>
+        }
+      />
 
-        <View style={styles.searchRow}>
-          <View style={[styles.searchBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.textSecondary} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Buscar por título o contenido"
-              placeholderTextColor={theme.colors.placeholder}
-              style={[styles.searchInput, { color: theme.colors.text }]}
-              autoCapitalize="none"
+      <FlatList
+        data={sorted}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <MaterialCommunityIcons
+              name="newspaper-variant-outline"
+              size={48}
+              color={theme.colors.muted}
             />
+            <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Sin noticias aún</Text>
+            <Text style={[styles.emptySubtitle, { color: theme.colors.muted }]}>
+              Creá la primera noticia para que aparezca en la app.
+            </Text>
+            <Pressable
+              onPress={openCreate}
+              style={[styles.emptyBtn, { backgroundColor: theme.colors.primary }]}
+            >
+              <Text style={styles.emptyBtnText}>Crear primera noticia</Text>
+            </Pressable>
           </View>
-        </View>
+        }
+      />
 
-        <FlatList
-          data={filtered}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          contentContainerStyle={styles.list}
-        />
+      {/* Create / Edit Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={[styles.modalBackdrop, { backgroundColor: theme.colors.overlay }]}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            {/* Modal header */}
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                {items.some((n) => n.id === form.id) ? 'Editar noticia' : 'Nueva noticia'}
+              </Text>
+              <Pressable onPress={() => setModalVisible(false)} accessibilityLabel="Cerrar">
+                <MaterialCommunityIcons name="close" size={22} color={theme.colors.textSecondary} />
+              </Pressable>
+            </View>
 
-        <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-          <View style={[styles.modalBackdrop, { backgroundColor: theme.colors.overlay }]}>
-            <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Noticia</Text>
-                <Pressable onPress={() => setModalVisible(false)}>
-                  <MaterialCommunityIcons name="close" size={22} color={theme.colors.textSecondary} />
-                </Pressable>
-              </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <TextField
+                label="Título"
+                value={form.title}
+                onChangeText={(v) => setForm((s) => ({ ...s, title: v }))}
+              />
+              <TextField
+                label="Descripción"
+                value={form.description}
+                onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
+              />
 
-              <View style={styles.modalBody}>
-                <TextField label="Título" value={form.title} onChangeText={(v) => setForm((s) => ({ ...s, title: v }))} />
-                <TextField
-                  label="Imagen (URL)"
-                  value={form.imageUrl}
-                  onChangeText={(v) => setForm((s) => ({ ...s, imageUrl: v }))}
-                  autoCapitalize="none"
-                />
-                <TextField
-                  label="Descripción"
-                  value={form.description}
-                  onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
-                />
+              {/* Image picker */}
+              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>
+                Imagen
+              </Text>
+              <Pressable
+                onPress={pickImage}
+                style={[
+                  styles.pickerBtn,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Seleccionar imagen"
+              >
+                <MaterialCommunityIcons name="image-plus" size={18} color={theme.colors.primary} />
+                <Text style={[styles.pickerBtnText, { color: theme.colors.text }]}>
+                  {form.imageUrl ? 'Cambiar imagen' : 'Seleccionar imagen del dispositivo'}
+                </Text>
+              </Pressable>
+              {form.imageUrl ? (
+                <View
+                  style={[styles.imagePreview, { borderColor: theme.colors.border }]}
+                >
+                  <Image
+                    source={{ uri: form.imageUrl }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                </View>
+              ) : null}
 
-                <View style={styles.selectRow}>
-                  {(['draft', 'published'] as const).map((st) => (
-                    <Pressable
-                      key={st}
-                      onPress={() => setForm((s) => ({ ...s, status: st }))}
+              {/* Status */}
+              <View style={styles.selectRow}>
+                {(['draft', 'published'] as const).map((st) => (
+                  <Pressable
+                    key={st}
+                    onPress={() => setForm((s) => ({ ...s, status: st }))}
+                    style={[
+                      styles.selectPill,
+                      {
+                        backgroundColor:
+                          form.status === st ? theme.colors.primary : theme.colors.surfaceAlt,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.selectPill,
-                        {
-                          backgroundColor: form.status === st ? theme.colors.primary : theme.colors.surfaceAlt,
-                          borderColor: theme.colors.border,
-                        },
+                        styles.selectPillText,
+                        { color: form.status === st ? '#fff' : theme.colors.text },
                       ]}
                     >
-                      <Text style={[styles.selectPillText, { color: form.status === st ? '#fff' : theme.colors.text }]}>
-                        {st === 'published' ? 'Publicada' : 'Borrador'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                      {st === 'published' ? 'Publicar ahora' : 'Guardar borrador'}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
+            </ScrollView>
 
-              <View style={styles.modalFooter}>
-                <Button title={saving ? 'Guardando...' : 'Guardar'} onPress={handleSave} disabled={saving} style={{ backgroundColor: theme.colors.primary }} />
-              </View>
+            <View style={styles.modalFooter}>
+              <Button
+                title={saving ? 'Guardando...' : 'Guardar noticia'}
+                onPress={handleSave}
+                disabled={saving}
+              />
             </View>
           </View>
-        </Modal>
-      </View>
-    </ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: spacing.lg },
-  screenHeader: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    marginBottom: spacing.lg,
-    alignItems: 'flex-start',
-  },
-  headerText: { flex: 1 },
-  title: { fontSize: 20, fontWeight: typography.bold as any },
-  subtitle: { fontSize: 12, fontWeight: typography.regular as any, marginTop: spacing.xs },
-  addButton: {
+  root: { flex: 1 },
+  listContent: { padding: spacing.lg, paddingBottom: 100, gap: spacing.md },
+  addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: radius.lg,
   },
-  addButtonText: { color: '#fff', fontSize: 14, fontWeight: typography.semibold as any },
-  searchRow: { marginBottom: spacing.md },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-  },
-  searchInput: {
-    flex: 1,
-    height: 48,
-    paddingHorizontal: spacing.md,
-    fontSize: 14,
-    fontWeight: typography.regular as any,
-  },
-  list: { gap: spacing.md, paddingBottom: spacing.lg },
-  card: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, ...shadows.md },
+  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  card: { borderRadius: radius.xl, overflow: 'hidden', borderWidth: 1 },
   preview: { height: 160, position: 'relative' },
-  previewImage: { width: '100%', height: '100%' },
   previewMask: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  body: { padding: spacing.lg, gap: spacing.md },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, alignItems: 'flex-start' },
-  titleCol: { flex: 1, gap: spacing.xs },
-  iconBtn: { width: 32, height: 32, borderRadius: radius.full, justifyContent: 'center', alignItems: 'center' },
-  cardTitle: { fontSize: 14, fontWeight: typography.semibold as any },
-  cardMeta: { fontSize: 12, fontWeight: typography.regular as any },
-  cardDesc: { fontSize: 12, fontWeight: typography.regular as any, lineHeight: 18 },
-  actionsRow: { flexDirection: 'row', gap: spacing.sm },
+  statusPill: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusPillText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  body: { padding: spacing.lg, gap: spacing.sm },
+  cardTitle: { fontSize: 14, fontWeight: '700' },
+  cardMeta: { fontSize: 11 },
+  cardDesc: { fontSize: 12, lineHeight: 18 },
+  actionsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -299,16 +389,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
-    gap: spacing.xs,
+    gap: 4,
   },
-  actionText: { fontSize: 12, fontWeight: typography.semibold as any },
-  modalBackdrop: { flex: 1, justifyContent: 'center', padding: spacing.lg },
-  modalCard: { borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg },
-  modalTitle: { fontSize: 16, fontWeight: typography.bold as any },
-  modalBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.md },
+  actionText: { fontSize: 12, fontWeight: '700' },
+  emptyBox: { alignItems: 'center', paddingTop: 60, gap: spacing.md, paddingHorizontal: spacing.xl },
+  emptyTitle: { fontSize: 16, fontWeight: '700' },
+  emptySubtitle: { fontSize: 13, textAlign: 'center' },
+  emptyBtn: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.xl,
+    marginTop: spacing.sm,
+  },
+  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
+  modalCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    maxHeight: '92%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800' },
+  modalBody: { paddingHorizontal: spacing.lg },
+  fieldLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: spacing.md },
+  pickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  pickerBtnText: { fontSize: 13, fontWeight: '600' },
+  imagePreview: {
+    height: 160,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginTop: spacing.sm,
+  },
+  selectRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.sm },
+  selectPill: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  selectPillText: { fontSize: 12, fontWeight: '700' },
   modalFooter: { padding: spacing.lg },
-  selectRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  selectPill: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.full, borderWidth: 1 },
-  selectPillText: { fontSize: 12, fontWeight: typography.semibold as any },
 });

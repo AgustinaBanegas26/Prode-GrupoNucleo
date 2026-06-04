@@ -9,7 +9,7 @@ import { predictions } from '../../mockData';
 import { useNewsStore } from '../../content/store/newsStore';
 import { useImageAssetsStore } from '../../content/store/imageAssetsStore';
 import { useRewardsStore } from '../../content/store/rewardsStore';
-import { useSliderStore } from '../../content/store/sliderStore';
+import { useSliderRealtime, useSliderSlides } from '../../content/api/sliderSlides';
 import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -134,7 +134,8 @@ export function AdminDashboardScreen() {
   const rewards = useRewardsStore((s) => s.rewards);
   const news = useNewsStore((s) => s.items);
   const images = useImageAssetsStore((s) => s.assets);
-  const slides = useSliderStore((s) => s.slides);
+  const { data: slides = [] } = useSliderSlides();
+  useSliderRealtime();
 
   useEffect(() => {
     refreshUsers();
@@ -147,7 +148,7 @@ export function AdminDashboardScreen() {
     const rewardsCount = rewards.length;
     const publishedNews = news.filter((n) => n.status === 'published').length;
     const imagesCount = images.length;
-    const activeSlides = slides.filter((s) => s.status === 'active').length;
+    const activeSlides = slides.filter((s) => s.active).length;
 
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
 

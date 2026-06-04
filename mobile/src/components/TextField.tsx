@@ -75,8 +75,8 @@ export function TextField({
             color: theme.colors.text,
             fontSize: 15,
             paddingVertical: 0,
-            // @ts-ignore — web only: remove browser default outline
-            outlineStyle: 'none',
+            // web-only (RNWeb): remover outline del browser
+            outlineStyle: 'none' as any,
           }}
         />
         {secureTextEntry ? (
