@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -13,41 +14,46 @@ import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { radius, shadows, spacing } from '../../../theme/theme';
 import {
-  NotifAudience,
-  useNotificationsStore,
-} from '../../content/store/notificationsStore';
-import { useAdminActivityStore } from '../store/adminActivityStore';
+  useNotifications,
+  useSendNotification,
+  useDeleteNotification,
+  useNotificationsRealtime,
+  type NotificationAudience,
+  type NotificationRow,
+} from '../../content/api/notifications';
 
-const AUDIENCE_CONFIG: { key: NotifAudience; label: string; icon: string; color: string }[] = [
-  { key: 'global', label: 'Global', icon: 'globe', color: '#CC2627' },
-  { key: 'group', label: 'Por grupo', icon: 'users', color: '#FF9800' },
-  { key: 'individual', label: 'Individual', icon: 'user', color: '#2196F3' },
+const AUDIENCE_CONFIG: { key: NotificationAudience; label: string; icon: string; color: string }[] = [
+  { key: 'global',     label: 'Global',    icon: 'globe', color: '#CC2627' },
+  { key: 'group',      label: 'Por grupo', icon: 'users', color: '#FF9800' },
+  { key: 'individual', label: 'Individual',icon: 'user',  color: '#2196F3' },
 ];
 
-const AUDIENCE_LABELS: Record<NotifAudience, string> = {
+const AUDIENCE_LABELS: Record<NotificationAudience, string> = {
   global: 'Global',
   group: 'Por grupo',
   individual: 'Individual',
 };
 
-const formatDate = (ts: number) =>
-  new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 export function NotificationsManagementScreen() {
   const { theme } = useAppTheme();
-  const notifications = useNotificationsStore((s) => s.notifications);
-  const send = useNotificationsStore((s) => s.send);
-  const remove = useNotificationsStore((s) => s.remove);
-  const log = useAdminActivityStore((s) => s.log);
+  const isDark = theme.isDark;
+
+  useNotificationsRealtime();
+
+  const { data: notifications, isLoading } = useNotifications();
+  const sendNotification = useSendNotification();
+  const deleteNotification = useDeleteNotification();
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [audience, setAudience] = useState<NotifAudience>('global');
+  const [audience, setAudience] = useState<NotificationAudience>('global');
   const [targetGroup, setTargetGroup] = useState('');
   const [targetUserId, setTargetUserId] = useState('');
-  const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!title.trim() || !body.trim()) {
       Alert.alert('Error', 'Completá título y mensaje.');
       return;
@@ -61,47 +67,39 @@ export function NotificationsManagementScreen() {
       return;
     }
 
-    setSending(true);
     try {
-      send({
-        id: `${Date.now()}`,
+      await sendNotification.mutateAsync({
         title: title.trim(),
         body: body.trim(),
         audience,
-        targetGroup: audience === 'group' ? targetGroup.trim() : undefined,
-        targetUserId: audience === 'individual' ? targetUserId.trim() : undefined,
-      });
-      log({
-        action: 'create',
-        module: 'notifications',
-        title: 'Notificación enviada',
-        detail: `${AUDIENCE_LABELS[audience]} · ${title.trim()}`,
+        target_group: audience === 'group' ? targetGroup.trim() : undefined,
+        target_user_id: audience === 'individual' ? targetUserId.trim() : undefined,
       });
       setTitle('');
       setBody('');
       setTargetGroup('');
       setTargetUserId('');
       Alert.alert('✓', 'Notificación enviada correctamente.');
-    } finally {
-      setSending(false);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo enviar.');
     }
   };
 
-  const confirmDelete = (id: string, t: string) => {
-    Alert.alert('Eliminar', t, [
+  const confirmDelete = (item: NotificationRow) => {
+    Alert.alert('Eliminar', item.title, [
       { text: 'Cancelar' },
       {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: () => {
-          remove(id);
-          log({ action: 'delete', module: 'notifications', title: 'Notificación eliminada', detail: t });
+        text: 'Eliminar', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteNotification.mutateAsync(item.id);
+          } catch (e) {
+            Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo eliminar.');
+          }
         },
       },
     ]);
   };
-
-  const isDark = theme.isDark;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -111,13 +109,13 @@ export function NotificationsManagementScreen() {
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.colors.text }]}>Notificaciones Push</Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            {notifications.length} enviadas
+            {notifications?.length ?? 0} enviadas
           </Text>
         </View>
       </View>
 
       <FlatList
-        data={notifications}
+        data={notifications ?? []}
         keyExtractor={(n) => n.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -149,67 +147,36 @@ export function NotificationsManagementScreen() {
                 })}
               </View>
 
-              {/* Target */}
               {audience === 'group' && (
                 <>
                   <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Grupo destino</Text>
-                  <TextInput
-                    value={targetGroup}
-                    onChangeText={setTargetGroup}
-                    placeholder="Ej: Grupo A"
-                    placeholderTextColor={theme.colors.placeholder}
-                    style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                  />
+                  <TextInput value={targetGroup} onChangeText={setTargetGroup} placeholder="Ej: Grupo A" placeholderTextColor={theme.colors.placeholder} style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]} />
                 </>
               )}
               {audience === 'individual' && (
                 <>
                   <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>ID de usuario</Text>
-                  <TextInput
-                    value={targetUserId}
-                    onChangeText={setTargetUserId}
-                    placeholder="Ej: 0001"
-                    placeholderTextColor={theme.colors.placeholder}
-                    keyboardType="number-pad"
-                    style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                  />
+                  <TextInput value={targetUserId} onChangeText={setTargetUserId} placeholder="Ej: 0001" placeholderTextColor={theme.colors.placeholder} keyboardType="number-pad" style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]} />
                 </>
               )}
 
-              {/* Title */}
               <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Título</Text>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Ej: ¡Comienza el Mundial!"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
+              <TextInput value={title} onChangeText={setTitle} placeholder="Ej: ¡Comienza el Mundial!" placeholderTextColor={theme.colors.placeholder} style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]} />
 
-              {/* Body */}
               <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Mensaje</Text>
-              <TextInput
-                value={body}
-                onChangeText={setBody}
-                placeholder="Escribí el contenido de la notificación..."
-                placeholderTextColor={theme.colors.placeholder}
-                multiline
-                numberOfLines={3}
-                style={[styles.textArea, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
+              <TextInput value={body} onChangeText={setBody} placeholder="Escribí el contenido de la notificación..." placeholderTextColor={theme.colors.placeholder} multiline numberOfLines={3} style={[styles.textArea, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]} />
 
-              {/* Send button */}
               <Pressable
                 onPress={handleSend}
-                disabled={sending}
-                style={({ pressed }) => [styles.sendBtn, { opacity: pressed || sending ? 0.8 : 1 }, shadows.glow]}
+                disabled={sendNotification.isPending}
+                style={({ pressed }) => [styles.sendBtn, { opacity: pressed || sendNotification.isPending ? 0.8 : 1 }, shadows.glow]}
               >
                 <Feather name="send" size={16} color="#fff" />
-                <Text style={styles.sendBtnText}>{sending ? 'Enviando...' : 'Enviar notificación'}</Text>
+                <Text style={styles.sendBtnText}>{sendNotification.isPending ? 'Enviando...' : 'Enviar notificación'}</Text>
               </Pressable>
             </View>
 
-            {notifications.length > 0 && (
+            {(notifications?.length ?? 0) > 0 && (
               <Text style={[styles.historyLabel, { color: theme.colors.textSecondary }]}>HISTORIAL</Text>
             )}
           </>
@@ -225,26 +192,26 @@ export function NotificationsManagementScreen() {
                 <Text style={[styles.notifBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
                 <Text style={[styles.notifMeta, { color: theme.colors.muted }]}>
                   {AUDIENCE_LABELS[item.audience]}
-                  {item.targetGroup ? ` · ${item.targetGroup}` : ''}
-                  {item.targetUserId ? ` · Usuario ${item.targetUserId}` : ''}
-                  {' · '}{formatDate(item.sentAt)}
+                  {item.target_group ? ` · ${item.target_group}` : ''}
+                  {item.target_user_id ? ` · Usuario ${item.target_user_id}` : ''}
+                  {' · '}{formatDate(item.sent_at)}
                 </Text>
               </View>
             </View>
-            <Pressable
-              onPress={() => confirmDelete(item.id, item.title)}
-              style={styles.deleteBtn}
-              accessibilityLabel="Eliminar notificación"
-            >
+            <Pressable onPress={() => confirmDelete(item)} style={styles.deleteBtn} accessibilityLabel="Eliminar notificación">
               <Feather name="trash-2" size={16} color={theme.colors.error} />
             </Pressable>
           </View>
         )}
         ListEmptyComponent={
-          <View style={styles.emptyBox}>
-            <Feather name="bell-off" size={40} color={theme.colors.muted} />
-            <Text style={[styles.emptyText, { color: theme.colors.muted }]}>Aún no se enviaron notificaciones</Text>
-          </View>
+          isLoading ? (
+            <View style={styles.emptyBox}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
+          ) : (
+            <View style={styles.emptyBox}>
+              <Feather name="bell-off" size={40} color={theme.colors.muted} />
+              <Text style={[styles.emptyText, { color: theme.colors.muted }]}>Aún no se enviaron notificaciones</Text>
+            </View>
+          )
         }
       />
     </View>

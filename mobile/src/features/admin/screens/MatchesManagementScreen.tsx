@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -11,210 +12,157 @@ import {
   View,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '../../../components/Button';
 import { useAppTheme } from '../../../providers/ThemeProvider';
+import { getFlagEmoji, getNationalColor, radius, shadows, spacing } from '../../../theme/theme';
 import {
-  getFlagEmoji,
-  getNationalColor,
-  radius,
-  shadows,
-  spacing,
-  typography,
-} from '../../../theme/theme';
-import {
-  AdminMatch,
-  makeEmptyMatch,
-  MatchStatus,
-  useMatchesStore,
-} from '../../content/store/matchesStore';
-import { useAdminActivityStore } from '../store/adminActivityStore';
+  useMatches,
+  useMatchesRealtime,
+  useUpsertMatch,
+  matchesQueryKey,
+  type MatchRow,
+} from '../../content/api/matches';
+import { supabase } from '../../../lib/supabase';
+import { toMatchItemFromDb, inferPhaseFromRound } from '../../matchesAdapter';
 
 const PHASES = ['Fase de Grupos', 'Octavos', 'Cuartos', 'Semifinales', 'Final'] as const;
-const STATUS_LABELS: Record<MatchStatus, string> = {
-  upcoming: 'Próximo',
-  live: 'EN VIVO',
-  finished: 'Finalizado',
-};
-const STATUS_COLORS: Record<MatchStatus, string> = {
-  upcoming: '#FF9800',
-  live: '#F44336',
-  finished: '#4CAF50',
+
+type StatusLabel = 'Próximo' | 'EN VIVO' | 'Finalizado';
+
+function getStatusLabel(status: string): StatusLabel {
+  if (['FT', 'AET', 'PEN'].includes(status)) return 'Finalizado';
+  if (['1H', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE'].includes(status)) return 'EN VIVO';
+  return 'Próximo';
+}
+
+const STATUS_COLORS: Record<StatusLabel, string> = {
+  Próximo: '#FF9800',
+  'EN VIVO': '#F44336',
+  Finalizado: '#4CAF50',
 };
 
-function MatchRow({ item, onEdit, onDelete, onSetResult }: {
-  item: AdminMatch;
-  onEdit: () => void;
-  onDelete: () => void;
-  onSetResult: () => void;
-}) {
+// ── Componente fila de partido ────────────────────────────────
+
+function MatchRowCard({ item, onSetResult }: { item: MatchRow; onSetResult: () => void }) {
   const { theme } = useAppTheme();
-  const homeFlag = getFlagEmoji(item.homeCode);
-  const awayFlag = getFlagEmoji(item.awayCode);
-  const homeColor = getNationalColor(item.homeCode);
-  const awayColor = getNationalColor(item.awayCode);
+  const adapted = toMatchItemFromDb(item);
+  const homeFlag = getFlagEmoji(adapted.homeCode);
+  const awayFlag = getFlagEmoji(adapted.awayCode);
+  const homeColor = getNationalColor(adapted.homeCode);
+  const awayColor = getNationalColor(adapted.awayCode);
+  const statusLabel = getStatusLabel(item.status ?? '');
 
   return (
     <View style={[styles.matchCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, shadows.sm]}>
-      {/* Teams row */}
       <View style={styles.teamsRow}>
         <View style={[styles.teamChip, { backgroundColor: homeColor.bg }]}>
           <Text style={styles.teamFlag}>{homeFlag}</Text>
-          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{item.homeCode || '---'}</Text>
+          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{adapted.homeCode}</Text>
         </View>
 
         <View style={styles.matchMeta}>
-          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] }]}>
-            <Text style={styles.statusText}>{STATUS_LABELS[item.status]}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[statusLabel] }]}>
+            <Text style={styles.statusText}>{statusLabel}</Text>
           </View>
           <Text style={[styles.matchTime, { color: theme.colors.text }]}>
-            {item.date} {item.time}
+            {adapted.date} {adapted.time}
           </Text>
-          {item.status === 'finished' && item.homeScore != null && (
+          {statusLabel === 'Finalizado' && item.home_goals != null && (
             <Text style={[styles.resultText, { color: theme.colors.primary }]}>
-              {item.homeScore} — {item.awayScore}
+              {item.home_goals} — {item.away_goals}
             </Text>
           )}
         </View>
 
         <View style={[styles.teamChip, { backgroundColor: awayColor.bg }]}>
           <Text style={styles.teamFlag}>{awayFlag}</Text>
-          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{item.awayCode || '---'}</Text>
+          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{adapted.awayCode}</Text>
         </View>
       </View>
 
-      {/* Info */}
       <Text style={[styles.matchInfo, { color: theme.colors.textSecondary }]}>
-        {[item.group, item.phase, item.stadium].filter(Boolean).join(' · ')}
+        {[adapted.group, adapted.stadium].filter(Boolean).join(' · ')}
       </Text>
 
-      {/* Actions */}
       <View style={styles.actionsRow}>
-        <Pressable onPress={onEdit} style={[styles.actionBtn, { backgroundColor: theme.colors.primaryLight }]}>
-          <Feather name="edit-2" size={14} color={theme.colors.primary} />
-          <Text style={[styles.actionText, { color: theme.colors.primary }]}>Editar</Text>
-        </Pressable>
         <Pressable onPress={onSetResult} style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceAlt }]}>
           <Feather name="check-square" size={14} color={theme.colors.success} />
-          <Text style={[styles.actionText, { color: theme.colors.success }]}>Resultado</Text>
-        </Pressable>
-        <Pressable onPress={onDelete} style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceAlt }]}>
-          <Feather name="trash-2" size={14} color={theme.colors.error} />
-          <Text style={[styles.actionText, { color: theme.colors.error }]}>Eliminar</Text>
+          <Text style={[styles.actionText, { color: theme.colors.success }]}>Cargar resultado</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
+// ── Pantalla principal ────────────────────────────────────────
+
 export function MatchesManagementScreen() {
   const { theme } = useAppTheme();
-  const matches = useMatchesStore((s) => s.matches);
-  const upsert = useMatchesStore((s) => s.upsert);
-  const remove = useMatchesStore((s) => s.remove);
-  const setResult = useMatchesStore((s) => s.setResult);
-  const log = useAdminActivityStore((s) => s.log);
+  const qc = useQueryClient();
+
+  useMatchesRealtime();
+
+  const { data: matches, isLoading } = useMatches();
+  const upsertMatch = useUpsertMatch();
 
   const [phaseFilter, setPhaseFilter] = useState<string>('Todos');
-  const [modalVisible, setModalVisible] = useState(false);
   const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(makeEmptyMatch());
-  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(null);
   const [homeGoals, setHomeGoals] = useState('');
   const [awayGoals, setAwayGoals] = useState('');
 
-  const filtered = useMemo(
-    () => (phaseFilter === 'Todos' ? matches : matches.filter((m) => m.phase === phaseFilter)),
-    [matches, phaseFilter],
-  );
+  const filtered = useMemo(() => {
+    if (!matches) return [];
+    if (phaseFilter === 'Todos') return matches;
+    return matches.filter((m) => inferPhaseFromRound(m.round) === phaseFilter);
+  }, [matches, phaseFilter]);
 
-  const openCreate = () => {
-    setForm(makeEmptyMatch());
-    setModalVisible(true);
-  };
-
-  const openEdit = (m: AdminMatch) => {
-    setForm({
-      id: m.id, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
-      homeCode: m.homeCode, awayCode: m.awayCode,
-      date: m.date, time: m.time, stadium: m.stadium,
-      group: m.group, phase: m.phase, status: m.status,
-      homeScore: m.homeScore, awayScore: m.awayScore,
-    });
-    setModalVisible(true);
-  };
-
-  const openResult = (id: string) => {
-    const m = matches.find((x) => x.id === id);
-    setSelectedMatchId(id);
-    setHomeGoals(String(m?.homeScore ?? ''));
-    setAwayGoals(String(m?.awayScore ?? ''));
+  const openResult = (fixtureId: number) => {
+    const m = matches?.find((x) => x.fixture_id === fixtureId);
+    setSelectedFixtureId(fixtureId);
+    setHomeGoals(String(m?.home_goals ?? ''));
+    setAwayGoals(String(m?.away_goals ?? ''));
     setResultModalVisible(true);
   };
 
-  const handleSave = () => {
-    if (!form.homeCode.trim() || !form.awayCode.trim() || !form.date.trim()) {
-      Alert.alert('Error', 'Completá Local, Visitante y Fecha.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const existed = matches.some((m) => m.id === form.id);
-      upsert({
-        ...form,
-        homeTeam: form.homeTeam || form.homeCode,
-        awayTeam: form.awayTeam || form.awayCode,
-      });
-      log({ action: existed ? 'update' : 'create', module: 'matches', title: existed ? 'Partido actualizado' : 'Partido creado', detail: `${form.homeCode} vs ${form.awayCode}` });
-      setModalVisible(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveResult = () => {
+  const handleSaveResult = async () => {
     const h = parseInt(homeGoals, 10);
     const a = parseInt(awayGoals, 10);
     if (isNaN(h) || isNaN(a)) {
       Alert.alert('Error', 'Ingresá resultados válidos.');
       return;
     }
-    if (selectedMatchId) {
-      setResult(selectedMatchId, h, a);
-      const m = matches.find((x) => x.id === selectedMatchId);
-      log({ action: 'update', module: 'matches', title: 'Resultado cargado', detail: `${m?.homeCode} ${h}-${a} ${m?.awayCode}` });
+    if (!selectedFixtureId) return;
+
+    try {
+      await upsertMatch.mutateAsync({
+        fixture_id: selectedFixtureId,
+        home_goals: h,
+        away_goals: a,
+        status: 'FT',
+        updated_at: new Date().toISOString(),
+      });
+      setResultModalVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar.');
     }
-    setResultModalVisible(false);
   };
 
-  const confirmDelete = (m: AdminMatch) => {
-    Alert.alert('Eliminar partido', `${m.homeCode} vs ${m.awayCode}`, [
-      { text: 'Cancelar' },
-      {
-        text: 'Eliminar', style: 'destructive',
-        onPress: () => {
-          remove(m.id);
-          log({ action: 'delete', module: 'matches', title: 'Partido eliminado', detail: `${m.homeCode} vs ${m.awayCode}` });
-        },
-      },
-    ]);
-  };
-
-  const selectedMatch = matches.find((m) => m.id === selectedMatchId);
+  const selectedMatch = matches?.find((m) => m.fixture_id === selectedFixtureId);
+  const selectedAdapted = selectedMatch ? toMatchItemFromDb(selectedMatch) : null;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         <View>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Gestión de Partidos</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>{matches.length} partidos</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Partidos</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+            {matches?.length ?? 0} partidos en Supabase
+          </Text>
         </View>
-        <Pressable onPress={openCreate} style={[styles.addBtn, { backgroundColor: theme.colors.primary }]}>
-          <Feather name="plus" size={18} color="#fff" />
-          <Text style={styles.addBtnText}>Nuevo</Text>
-        </Pressable>
       </View>
 
       {/* Phase filter */}
@@ -233,133 +181,27 @@ export function MatchesManagementScreen() {
         })}
       </ScrollView>
 
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(m) => m.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <MatchRow
-            item={item}
-            onEdit={() => openEdit(item)}
-            onDelete={() => confirmDelete(item)}
-            onSetResult={() => openResult(item.id)}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyBox}>
-            <MaterialCommunityIcons name="soccer" size={48} color={theme.colors.muted} />
-            <Text style={[styles.emptyText, { color: theme.colors.muted }]}>No hay partidos cargados</Text>
-            <Pressable onPress={openCreate} style={[styles.emptyBtn, { backgroundColor: theme.colors.primary }]}>
-              <Text style={styles.emptyBtnText}>Crear primer partido</Text>
-            </Pressable>
-          </View>
-        }
-      />
-
-      {/* Create/Edit Modal */}
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={[styles.modalBackdrop, { backgroundColor: theme.colors.overlay }]}>
-          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                {matches.some((m) => m.id === form.id) ? 'Editar partido' : 'Nuevo partido'}
+      {isLoading ? (
+        <View style={styles.loadingBox}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(m) => String(m.fixture_id)}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <MatchRowCard item={item} onSetResult={() => openResult(item.fixture_id)} />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <MaterialCommunityIcons name="soccer" size={48} color={theme.colors.muted} />
+              <Text style={[styles.emptyText, { color: theme.colors.muted }]}>
+                No hay partidos para esta fase.{'\n'}Los partidos se sincronizan automáticamente desde el backend.
               </Text>
-              <Pressable onPress={() => setModalVisible(false)}>
-                <Feather name="x" size={22} color={theme.colors.textSecondary} />
-              </Pressable>
             </View>
-
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {/* Equipos */}
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Código Local (ej: ARG)</Text>
-              <TextInput
-                value={form.homeCode}
-                onChangeText={(v) => setForm((s) => ({ ...s, homeCode: v.toUpperCase(), homeTeam: v.toUpperCase() }))}
-                placeholder="ARG"
-                placeholderTextColor={theme.colors.placeholder}
-                maxLength={3}
-                autoCapitalize="characters"
-                style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Código Visitante (ej: BRA)</Text>
-              <TextInput
-                value={form.awayCode}
-                onChangeText={(v) => setForm((s) => ({ ...s, awayCode: v.toUpperCase(), awayTeam: v.toUpperCase() }))}
-                placeholder="BRA"
-                placeholderTextColor={theme.colors.placeholder}
-                maxLength={3}
-                autoCapitalize="characters"
-                style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
-
-              {/* Fecha y hora */}
-              <View style={styles.twoCol}>
-                <View style={styles.colHalf}>
-                  <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Fecha</Text>
-                  <TextInput
-                    value={form.date}
-                    onChangeText={(v) => setForm((s) => ({ ...s, date: v }))}
-                    placeholder="20 Nov"
-                    placeholderTextColor={theme.colors.placeholder}
-                    style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                  />
-                </View>
-                <View style={styles.colHalf}>
-                  <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Hora</Text>
-                  <TextInput
-                    value={form.time}
-                    onChangeText={(v) => setForm((s) => ({ ...s, time: v }))}
-                    placeholder="18:00"
-                    placeholderTextColor={theme.colors.placeholder}
-                    style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                  />
-                </View>
-              </View>
-
-              {/* Grupo y estadio */}
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Grupo</Text>
-              <TextInput
-                value={form.group}
-                onChangeText={(v) => setForm((s) => ({ ...s, group: v }))}
-                placeholder="Grupo A"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
-
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Estadio</Text>
-              <TextInput
-                value={form.stadium}
-                onChangeText={(v) => setForm((s) => ({ ...s, stadium: v }))}
-                placeholder="Lusail Stadium"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[styles.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
-
-              {/* Fase */}
-              <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Fase</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  {PHASES.map((p) => (
-                    <Pressable
-                      key={p}
-                      onPress={() => setForm((s) => ({ ...s, phase: p }))}
-                      style={[styles.filterPill, { backgroundColor: form.phase === p ? '#CC2627' : theme.colors.surfaceAlt }]}
-                    >
-                      <Text style={[styles.filterText, { color: form.phase === p ? '#fff' : theme.colors.textSecondary }]}>{p}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <Button title={saving ? 'Guardando...' : 'Guardar partido'} onPress={handleSave} disabled={saving} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+          }
+        />
+      )}
 
       {/* Result Modal */}
       <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
@@ -368,9 +210,11 @@ export function MatchesManagementScreen() {
             <Text style={[styles.modalTitle, { color: theme.colors.text, marginBottom: spacing.lg }]}>
               Cargar resultado
             </Text>
-            <Text style={[styles.matchLabel, { color: theme.colors.textSecondary }]}>
-              {selectedMatch ? `${getFlagEmoji(selectedMatch.homeCode)} ${selectedMatch.homeCode}  vs  ${selectedMatch.awayCode} ${getFlagEmoji(selectedMatch.awayCode)}` : ''}
-            </Text>
+            {selectedAdapted && (
+              <Text style={[styles.matchLabel, { color: theme.colors.textSecondary }]}>
+                {getFlagEmoji(selectedAdapted.homeCode)} {selectedAdapted.homeCode}  vs  {selectedAdapted.awayCode} {getFlagEmoji(selectedAdapted.awayCode)}
+              </Text>
+            )}
 
             <View style={styles.resultInputRow}>
               <TextInput
@@ -400,8 +244,8 @@ export function MatchesManagementScreen() {
               <Pressable onPress={() => setResultModalVisible(false)} style={[styles.cancelBtn, { borderColor: theme.colors.border }]}>
                 <Text style={[styles.cancelText, { color: theme.colors.textSecondary }]}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={handleSaveResult} style={styles.confirmBtn}>
-                <Text style={styles.confirmText}>Confirmar</Text>
+              <Pressable onPress={handleSaveResult} disabled={upsertMatch.isPending} style={styles.confirmBtn}>
+                <Text style={styles.confirmText}>{upsertMatch.isPending ? 'Guardando...' : 'Confirmar'}</Text>
               </Pressable>
             </View>
           </View>
@@ -416,12 +260,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, borderBottomWidth: 1 },
   title: { fontSize: 20, fontWeight: '800' },
   subtitle: { fontSize: 12, marginTop: 2 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   filterScroll: { maxHeight: 52 },
   filterContent: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
   filterText: { fontSize: 12, fontWeight: '700' },
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40 },
   listContent: { padding: spacing.lg, paddingBottom: 100, gap: spacing.md },
   matchCard: { borderRadius: radius.xl, borderWidth: 1, padding: spacing.lg, gap: spacing.sm },
   teamsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -437,21 +280,11 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, gap: 4 },
   actionText: { fontSize: 12, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', paddingTop: 60, gap: spacing.md },
-  emptyText: { fontSize: 14, fontWeight: '600' },
-  emptyBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.xl, marginTop: spacing.sm },
-  emptyBtnText: { color: '#fff', fontWeight: '700' },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
-  modalCard: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg },
+  emptyBox: { alignItems: 'center', paddingTop: 60, gap: spacing.md, paddingHorizontal: spacing.xl },
+  emptyText: { fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 22 },
+  modalBackdrop: { flex: 1, justifyContent: 'center', padding: spacing.xl },
+  resultCard: { borderRadius: 28, borderWidth: 1, padding: spacing.xl, alignItems: 'center', gap: spacing.lg },
   modalTitle: { fontSize: 17, fontWeight: '800' },
-  modalBody: { paddingHorizontal: spacing.lg },
-  fieldLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: spacing.md },
-  input: { borderWidth: 1, borderRadius: radius.lg, height: 48, paddingHorizontal: spacing.md, fontSize: 15, fontWeight: '500' },
-  twoCol: { flexDirection: 'row', gap: spacing.sm },
-  colHalf: { flex: 1 },
-  modalFooter: { padding: spacing.lg },
-  resultCard: { margin: spacing.xl, borderRadius: 28, borderWidth: 1, padding: spacing.xl, alignItems: 'center', gap: spacing.lg },
   matchLabel: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
   resultInputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   goalInput: { width: 72, height: 72, borderRadius: radius.xl, borderWidth: 2, fontSize: 28, fontWeight: '800' },
