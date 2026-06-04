@@ -22,3 +22,4 @@ export { PremiumRankingCard } from './PremiumRankingCard';
 export { QuickRankingPodium } from './QuickRankingPodium';
 export { BadgeIndicator } from './BadgeIndicator';
 export type { BadgeType } from './BadgeIndicator';
+export { AdminScreenHeader } from './AdminScreenHeader';
