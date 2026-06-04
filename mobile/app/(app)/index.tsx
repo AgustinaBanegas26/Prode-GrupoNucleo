@@ -65,7 +65,7 @@ export default function AppHomeScreen() {
                 Rol: {user.role === 'admin' ? 'Administrador' : 'Cliente'}
               </Text>
               {user.role === 'admin' ? (
-                <Text style={{ color: theme.colors.textSecondary }}>Usuario: {user.usuario}</Text>
+                <Text style={{ color: theme.colors.textSecondary }}>Usuario: {user.admin_id}</Text>
               ) : (
                 <Text style={{ color: theme.colors.textSecondary }}>Número de Cliente: {user.cliente_id}</Text>
               )}
