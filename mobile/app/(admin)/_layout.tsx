@@ -1,28 +1,27 @@
 import React from 'react';
 import { Redirect, Stack } from 'expo-router';
+
 import { LoadingScreen } from '../../src/components/LoadingScreen';
-import { useAuth } from '../../src/providers/AuthProvider';
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function AdminLayout() {
-  const { user, loading } = useAuth();
+  const session = useAuthStore((s) => s.session);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
 
-  if (loading) {
+  if (!isHydrated) {
     return <LoadingScreen />;
   }
 
-  const hasAdminSession = user && user.role === 'admin';
-
-  if (!hasAdminSession) {
+  if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
 
+  if (session.user.rol !== 'admin') {
+    return <Redirect href="/(app)" />;
+  }
+
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="login" />
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="users" />
       <Stack.Screen name="statistics" />
@@ -36,6 +35,8 @@ export default function AdminLayout() {
       <Stack.Screen name="slider" />
       <Stack.Screen name="news" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="matches" />
+      <Stack.Screen name="notifications" />
     </Stack>
   );
 }

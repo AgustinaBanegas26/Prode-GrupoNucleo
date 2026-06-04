@@ -120,6 +120,22 @@ const MENU_OPTIONS: MenuOption[] = [
     route: '/(admin)/settings',
     color: 'warning',
   },
+  {
+    id: '13',
+    icon: 'soccer',
+    label: 'Gestión de Partidos',
+    description: 'Crear, editar y cargar resultados',
+    route: '/(admin)/matches',
+    color: 'primary',
+  },
+  {
+    id: '14',
+    icon: 'bell-ring',
+    label: 'Notificaciones Push',
+    description: 'Enviar globales, por grupo o individuales',
+    route: '/(admin)/notifications',
+    color: 'info',
+  },
 ];
 
 export function AdminDashboardScreen() {
