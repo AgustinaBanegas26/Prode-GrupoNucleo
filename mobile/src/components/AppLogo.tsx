@@ -3,8 +3,8 @@ import { Image, type ImageStyle, type StyleProp } from 'react-native';
 import { useAppTheme } from '../providers/ThemeProvider';
 import { useBrandingStore } from '../features/content/store/brandingStore';
 
-const lightLogo = require('../../images/icononucleo.png');
-const darkLogo = require('../../images/icononucleo-light.png');
+const lightLogo = require('../../images/icononucleo-light.png');
+const darkLogo = require('../../images/icononucleo.png');
 
 export function AppLogo({ style }: { style?: StyleProp<ImageStyle> }) {
   const { resolvedScheme } = useAppTheme();

@@ -1,47 +1,86 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, ProfileStatsCard } from '../../src/components';
+import { ProfileStatsCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
-import { profileMenu, profileStats } from '../../src/features/mockData';
+import { profileStats } from '../../src/features/mockData';
 import { useAuth } from '../../src/providers/AuthProvider';
+import { useAppTheme } from '../../src/providers/ThemeProvider';
+
+const MENU_ITEMS = [
+  { id: 'm1', label: 'Mis Pronósticos', icon: 'trophy-outline',       route: '/(app)/pronosticos' },
+  { id: 'm2', label: 'Fixture',         icon: 'calendar-outline',     route: '/(app)/fixture'     },
+  { id: 'm3', label: 'Ranking',         icon: 'bar-chart-outline',    route: '/(app)/posiciones'  },
+  { id: 'm4', label: 'Noticias',        icon: 'newspaper-outline',    route: '/(app)/noticias'    },
+];
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const router    = useRouter();
+  const { theme } = useAppTheme();
   const { user, logout } = useAuth();
 
-  const name = user ? user.nombre : 'Usuario';
-  const email = user ? (user.role === 'admin' ? `Admin: ${user.admin_id}` : `Cliente: ${user.cliente_id}`) : '';
+  const name    = user?.nombre ?? 'Usuario';
+  const initials = name.substring(0, 2).toUpperCase();
+  const subtitle = user
+    ? user.role === 'admin'
+      ? `Administrador · ${user.admin_id ?? ''}`
+      : `Cliente · #${user.cliente_id ?? ''}`
+    : '';
 
   return (
-    <Screen style={styles.screen}>
-      <AppHeader />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.avatarBox}>
-          <Text style={styles.avatarLabel}>
-            {user?.nombre ? user.nombre.substring(0, 2).toUpperCase() : 'U'}
-          </Text>
+    <Screen>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: 110 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Header ───────────────────────────────────── */}
+        <View style={[styles.headerCard, { backgroundColor: theme.colors.primary }]}>
+          <View style={styles.avatarRing}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <Text style={styles.nameText}>{name}</Text>
+          <Text style={styles.subtitleText}>{subtitle}</Text>
         </View>
-        <Text style={styles.name}>{name}</Text>
-        <Text style={styles.email}>{email}</Text>
 
-        <ProfileStatsCard {...profileStats} />
+        {/* ── Stats ────────────────────────────────────── */}
+        <View style={[styles.section, { marginTop: -20 }]}>
+          <ProfileStatsCard {...profileStats} />
+        </View>
 
-        <View style={styles.menuCard}>
-          {profileMenu.map((item) => (
-            <Pressable key={item.id} style={styles.menuItem}>
-              <Text style={styles.menuText}>{item.label}</Text>
+        {/* ── Menu ─────────────────────────────────────── */}
+        <View style={[styles.section, styles.menuCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          {MENU_ITEMS.map((item, i) => (
+            <Pressable
+              key={item.id}
+              onPress={() => router.push(item.route as any)}
+              style={({ pressed }) => [
+                styles.menuItem,
+                { borderBottomColor: theme.colors.divider, opacity: pressed ? 0.7 : 1 },
+                i === MENU_ITEMS.length - 1 && { borderBottomWidth: 0 },
+              ]}
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: theme.isDark ? 'rgba(204,38,39,0.12)' : 'rgba(204,38,39,0.08)' }]}>
+                <Ionicons name={item.icon as any} size={18} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.muted} />
             </Pressable>
           ))}
+        </View>
+
+        {/* ── Logout ───────────────────────────────────── */}
+        <View style={styles.section}>
           <Pressable
-            style={[styles.menuItem, styles.logoutButton]}
-            onPress={async () => {
-              await logout();
-              router.replace('/(auth)/login');
-            }}
+            onPress={async () => { await logout(); router.replace('/(auth)/login'); }}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              { borderColor: theme.colors.primary, backgroundColor: theme.isDark ? 'rgba(204,38,39,0.08)' : 'rgba(204,38,39,0.05)', opacity: pressed ? 0.7 : 1 },
+            ]}
           >
-            <Text style={[styles.menuText, styles.logoutText]}>Cerrar sesión</Text>
+            <Ionicons name="log-out-outline" size={18} color={theme.colors.primary} />
+            <Text style={[styles.logoutText, { color: theme.colors.primary }]}>Cerrar sesión</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -49,66 +88,61 @@ export default function ProfileScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
-  screen: {
-    paddingBottom: 20,
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
+  scroll: { flexGrow: 1 },
+
+  headerCard: {
+    paddingTop: 48,
     paddingBottom: 40,
+    alignItems: 'center',
+    gap: 8,
   },
-  avatarBox: {
-    width: 110,
-    height: 110,
-    borderRadius: 36,
-    backgroundColor: '#CC2627',
+  avatarRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 6,
   },
-  avatarLabel: {
-    color: '#fff',
-    fontSize: 36,
-    fontWeight: '800',
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0D0D0D',
-    textAlign: 'center',
-  },
-  email: {
-    fontSize: 14,
-    color: '#5C5C5C',
-    textAlign: 'center',
-    marginTop: 6,
-  },
+  avatarText:   { color: '#fff', fontSize: 28, fontWeight: '800' },
+  nameText:     { color: '#fff', fontSize: 22, fontWeight: '800' },
+  subtitleText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '500' },
+
+  section:   { paddingHorizontal: 16, marginTop: 16 },
   menuCard: {
-    marginTop: 24,
-    borderRadius: 24,
-    backgroundColor: '#fff',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
     overflow: 'hidden',
   },
   menuItem: {
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
-  menuText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0D0D0D',
+  menuIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoutButton: {
-    borderBottomWidth: 0,
+  menuText: { flex: 1, fontSize: 15, fontWeight: '600' },
+
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1.5,
   },
-  logoutText: {
-    color: '#CC2627',
-  },
+  logoutText: { fontSize: 15, fontWeight: '700' },
 });

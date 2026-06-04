@@ -24,8 +24,8 @@ export default function ForgotPasswordScreen() {
   const logoSource = useMemo(
     () =>
       theme.isDark
-        ? require('../../images/icononucleo-light.png')
-        : require('../../images/icononucleo.png'),
+        ? require('../../images/icononucleo.png')
+        : require('../../images/icononucleo-light.png'),
     [theme.isDark],
   );
 

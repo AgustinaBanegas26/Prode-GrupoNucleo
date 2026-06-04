@@ -8,8 +8,8 @@ export function LoadingScreen({ title = 'Cargando...' }: { title?: string }) {
   const { theme } = useAppTheme();
 
   const logoSource = theme.isDark
-    ? require('../../images/icononucleo-light.png')
-    : require('../../images/icononucleo.png');
+        ? require('../../images/icononucleo.png')
+        : require('../../images/icononucleo-light.png')
 
   return (
     <Screen>

@@ -507,13 +507,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   menuGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   menuCard: {
+    width: '48%',
     borderRadius: radius.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    gap: spacing.md,
+    gap: spacing.sm,
     ...shadows.sm,
   },
   iconCircle: {

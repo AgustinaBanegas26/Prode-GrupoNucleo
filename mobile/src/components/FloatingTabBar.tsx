@@ -6,22 +6,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../providers/ThemeProvider';
 import { shadows } from '../theme/theme';
 
-type Route = {
-  key: string;
-  name: string;
-};
-
+type Route = { key: string; name: string };
 type Props = {
   state: { index: number; routes: Route[] };
-  navigation: { navigate: (screen: string) => void };
+  navigation: { navigate: (name: string) => void; emit: (event: { type: string; target?: string; canPreventDefault?: boolean }) => { defaultPrevented: boolean } };
 };
 
 const TABS = [
-  { name: 'index', label: 'Inicio', icon: 'home' as const },
-  { name: 'fixture', label: 'Fixture', icon: 'calendar' as const },
-  { name: 'posiciones', label: 'Ranking', icon: 'bar-chart-2' as const },
-  { name: 'pronosticos', label: 'Pronósticos', icon: 'award' as const },
-  { name: 'perfil', label: 'Perfil', icon: 'user' as const },
+  { name: 'index',       label: 'Inicio',      icon: 'home'        as const },
+  { name: 'fixture',     label: 'Fixture',     icon: 'calendar'    as const },
+  { name: 'posiciones',  label: 'Ranking',     icon: 'bar-chart-2' as const },
+  { name: 'pronosticos', label: 'Pronósticos', icon: 'award'       as const },
+  { name: 'perfil',      label: 'Perfil',      icon: 'user'        as const },
 ];
 
 function TabItem({
@@ -34,7 +30,7 @@ function TabItem({
   onPress: () => void;
 }) {
   const { theme } = useAppTheme();
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim     = useRef(new Animated.Value(1)).current;
   const indicatorAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
 
   useEffect(() => {
@@ -48,7 +44,7 @@ function TabItem({
     if (isActive) {
       Animated.sequence([
         Animated.spring(scaleAnim, { toValue: 1.12, useNativeDriver: true, damping: 12, stiffness: 250 }),
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 250 }),
+        Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, damping: 12, stiffness: 250 }),
       ]).start();
     }
   }, [isActive]);
@@ -56,7 +52,7 @@ function TabItem({
   return (
     <Pressable
       onPress={onPress}
-      style={styles.tabItem}
+      style={[styles.tabItem, { cursor: 'pointer' } as any]}
       accessibilityLabel={tab.label}
       accessibilityRole="tab"
       accessibilityState={{ selected: isActive }}
@@ -72,12 +68,11 @@ function TabItem({
         style={[
           styles.tabLabel,
           { color: isActive ? theme.colors.primary : theme.colors.muted },
-          isActive && { fontWeight: '700' },
+          isActive && styles.tabLabelActive,
         ]}
       >
         {tab.label}
       </Text>
-      {/* Indicador activo */}
       <Animated.View
         style={[
           styles.activeIndicator,
@@ -89,30 +84,45 @@ function TabItem({
 }
 
 export function FloatingTabBar({ state, navigation }: Props) {
-  const { theme } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const isDark = theme.isDark;
-
-  const bgColor = isDark ? 'rgba(22,22,22,0.96)' : 'rgba(255,255,255,0.96)';
-  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const { theme }  = useAppTheme();
+  const insets     = useSafeAreaInsets();
+  const bgColor    = theme.isDark ? 'rgba(22,22,22,0.97)' : 'rgba(255,255,255,0.97)';
+  const borderColor = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
   return (
-    <View style={[styles.outerWrapper, { paddingBottom: insets.bottom + 8 }]}>
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: bgColor, borderColor },
-          shadows.float,
-        ]}
-      >
-        {TABS.map((tab, index) => (
-          <TabItem
-            key={tab.name}
-            tab={tab}
-            isActive={state.index === index}
-            onPress={() => navigation.navigate(tab.name)}
-          />
-        ))}
+    <View style={[styles.outerWrapper, { paddingBottom: Math.max(insets.bottom, 8) + 4 }]}>
+      <View style={[styles.container, { backgroundColor: bgColor, borderColor }, shadows.float]}>
+        {TABS.map((tab, index) => {
+          // Encontrar el route correspondiente por nombre
+          const routeIndex = state.routes.findIndex(
+            (r) => r.name === tab.name || r.name.endsWith(`/${tab.name}`) || r.name.endsWith(tab.name)
+          );
+          const targetIndex = routeIndex >= 0 ? routeIndex : index;
+          const isActive    = state.index === targetIndex;
+
+          return (
+            <TabItem
+              key={tab.name}
+              tab={tab}
+              isActive={isActive}
+              onPress={() => {
+                const targetRoute = state.routes[targetIndex];
+                if (!targetRoute) return;
+
+                // Emitir evento tabPress — patrón oficial de expo-router
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: targetRoute.key,
+                  canPreventDefault: true,
+                });
+
+                if (!isActive && !event.defaultPrevented) {
+                  navigation.navigate(targetRoute.name);
+                }
+              }}
+            />
+          );
+        })}
       </View>
     </View>
   );
@@ -146,6 +156,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
+  },
+  tabLabelActive: {
+    fontWeight: '700',
   },
   activeIndicator: {
     position: 'absolute',
