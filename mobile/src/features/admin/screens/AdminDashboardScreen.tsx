@@ -25,11 +25,43 @@ type MenuOption = {
 
 const MENU_OPTIONS: MenuOption[] = [
   {
+    id: '13',
+    icon: 'soccer',
+    label: 'Gestión de Partidos',
+    description: 'Crear, editar y cargar resultados',
+    route: '/(admin)/matches',
+    color: 'primary',
+  },
+  {
     id: '1',
     icon: 'account-multiple',
-    label: 'Gestión de Usuarios',
+    label: 'Usuarios',
     description: 'Administra usuarios registrados',
     route: '/(admin)/users',
+    color: 'primary',
+  },
+  {
+    id: '14',
+    icon: 'bell-ring',
+    label: 'Notificaciones Push',
+    description: 'Enviar globales, por grupo o individuales',
+    route: '/(admin)/notifications',
+    color: 'info',
+  },
+  {
+    id: '11',
+    icon: 'newspaper-variant',
+    label: 'Noticias',
+    description: 'Publicar y editar noticias',
+    route: '/(admin)/news',
+    color: 'success',
+  },
+  {
+    id: '4',
+    icon: 'trophy',
+    label: 'Rankings',
+    description: 'Consulta de clasificaciones',
+    route: '/(admin)/rankings',
     color: 'primary',
   },
   {
@@ -43,23 +75,31 @@ const MENU_OPTIONS: MenuOption[] = [
   {
     id: '3',
     icon: 'gift-outline',
-    label: 'Gestión de Premios',
+    label: 'Premios',
     description: 'Control de premios y recompensas',
     route: '/(admin)/rewards',
     color: 'warning',
   },
   {
-    id: '4',
-    icon: 'trophy',
-    label: 'Rankings',
-    description: 'Consulta de clasificaciones',
-    route: '/(admin)/rankings',
+    id: '10',
+    icon: 'view-carousel',
+    label: 'Slider / Banners',
+    description: 'Slides, botones y orden',
+    route: '/(admin)/slider',
+    color: 'info',
+  },
+  {
+    id: '9',
+    icon: 'image-multiple',
+    label: 'Imágenes',
+    description: 'Slider, ads y banners',
+    route: '/(admin)/images',
     color: 'primary',
   },
   {
     id: '5',
     icon: 'file-export',
-    label: 'Exportar Reportes',
+    label: 'Reportes',
     description: 'Genera reportes en PDF/Excel',
     route: '/(admin)/reports',
     color: 'success',
@@ -73,68 +113,12 @@ const MENU_OPTIONS: MenuOption[] = [
     color: 'warning',
   },
   {
-    id: '7',
-    icon: 'soccer',
-    label: 'Partidos Votados',
-    description: 'Partidos más votados',
-    route: '/(admin)/voted-matches',
-    color: 'error',
-  },
-  {
-    id: '8',
-    icon: 'history',
-    label: 'Actividad de Usuarios',
-    description: 'Control de actividad',
-    route: '/(admin)/user-activity',
-    color: 'info',
-  },
-  {
-    id: '9',
-    icon: 'image-multiple',
-    label: 'Gestión de Imágenes',
-    description: 'Slider, ads y banners',
-    route: '/(admin)/images',
-    color: 'primary',
-  },
-  {
-    id: '10',
-    icon: 'view-carousel',
-    label: 'Gestión de Slider',
-    description: 'Slides, botones y orden',
-    route: '/(admin)/slider',
-    color: 'info',
-  },
-  {
-    id: '11',
-    icon: 'newspaper-variant',
-    label: 'Noticias',
-    description: 'Publicar y editar',
-    route: '/(admin)/news',
-    color: 'success',
-  },
-  {
     id: '12',
     icon: 'cog',
     label: 'Configuración',
     description: 'Logo, colores y textos',
     route: '/(admin)/settings',
     color: 'warning',
-  },
-  {
-    id: '13',
-    icon: 'soccer',
-    label: 'Gestión de Partidos',
-    description: 'Crear, editar y cargar resultados',
-    route: '/(admin)/matches',
-    color: 'primary',
-  },
-  {
-    id: '14',
-    icon: 'bell-ring',
-    label: 'Notificaciones Push',
-    description: 'Enviar globales, por grupo o individuales',
-    route: '/(admin)/notifications',
-    color: 'info',
   },
 ];
 
@@ -226,112 +210,55 @@ export function AdminDashboardScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            Panel de Administrador
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
-            Bienvenido al control total
-          </Text>
+      {/* Header premium */}
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <View style={styles.headerLeft}>
+          <View style={[styles.adminAvatar, { backgroundColor: theme.colors.primary }]}>
+            <MaterialCommunityIcons name="shield-crown" size={22} color="#fff" />
+          </View>
+          <View>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+              Panel Admin
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
+              Mundial 2026 🏆
+            </Text>
+          </View>
         </View>
-        <Pressable onPress={handleLogout} style={styles.logoutButton}>
-          <MaterialCommunityIcons
-            name="logout"
-            size={24}
-            color={theme.colors.error}
-          />
+        <Pressable onPress={handleLogout} style={[styles.logoutButton, { backgroundColor: 'rgba(244,67,54,0.12)' }]}>
+          <MaterialCommunityIcons name="logout" size={18} color={theme.colors.error} />
         </Pressable>
       </View>
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Stats */}
+        {/* Stats — 2 columnas grandes */}
         <View style={styles.statsGrid}>
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="account-multiple" size={28} color={theme.colors.primary} />
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>{stats.totalUsers}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Usuarios</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="account-check" size={28} color={theme.colors.success} />
-            <Text style={[styles.statValue, { color: theme.colors.success }]}>{stats.activeUsers}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Usuarios activos</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="soccer" size={28} color={theme.colors.info} />
-            <Text style={[styles.statValue, { color: theme.colors.info }]}>{stats.predictionsCount}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Pronósticos</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="gift-outline" size={28} color={theme.colors.warning} />
-            <Text style={[styles.statValue, { color: theme.colors.warning }]}>{stats.rewardsCount}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Premios</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="newspaper-variant" size={28} color={theme.colors.success} />
-            <Text style={[styles.statValue, { color: theme.colors.success }]}>{stats.publishedNews}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Noticias publicadas</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="image-multiple" size={28} color={theme.colors.primary} />
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>{stats.imagesCount}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Imágenes</Text>
-          </View>
+          {[
+            { icon: 'account-multiple', value: stats.totalUsers, label: 'Usuarios', color: theme.colors.primary },
+            { icon: 'account-check', value: stats.activeUsers, label: 'Activos', color: theme.colors.success },
+            { icon: 'soccer', value: stats.predictionsCount, label: 'Pronósticos', color: theme.colors.info },
+            { icon: 'gift-outline', value: stats.rewardsCount, label: 'Premios', color: theme.colors.warning },
+            { icon: 'newspaper-variant', value: stats.publishedNews, label: 'Noticias', color: theme.colors.success },
+            { icon: 'image-multiple', value: stats.imagesCount, label: 'Imágenes', color: theme.colors.primary },
+          ].map((stat) => (
+            <View
+              key={stat.label}
+              style={[
+                styles.statCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View style={[styles.statIconBox, { backgroundColor: `${stat.color}18` }]}>
+                <MaterialCommunityIcons name={stat.icon as any} size={24} color={stat.color} />
+              </View>
+              <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
+              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{stat.label}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={[styles.chartCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
@@ -356,9 +283,9 @@ export function AdminDashboardScreen() {
           </View>
         </View>
 
-        {/* Menu Grid */}
+        {/* Menu Grid — 2 columnas */}
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-          Funciones Disponibles
+          Módulos
         </Text>
 
         <View style={styles.menuGrid}>
@@ -371,20 +298,20 @@ export function AdminDashboardScreen() {
                 {
                   backgroundColor: theme.colors.surface,
                   borderColor: theme.colors.border,
-                  opacity: pressed ? 0.7 : 1,
+                  opacity: pressed ? 0.8 : 1,
                 },
               ]}
             >
               <View
                 style={[
                   styles.iconCircle,
-                  { backgroundColor: getColorValue(option.color) },
+                  { backgroundColor: `${getColorValue(option.color)}18` },
                 ]}
               >
                 <MaterialCommunityIcons
                   name={option.icon as any}
-                  size={28}
-                  color="#fff"
+                  size={26}
+                  color={getColorValue(option.color)}
                 />
               </View>
               <Text style={[styles.menuLabel, { color: theme.colors.text }]}>
