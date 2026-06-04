@@ -11,18 +11,23 @@ import {
   View,
 } from 'react-native';
 
-import { AppHeader } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
 import { useAllFixtures } from '../../src/hooks/useApiFootball';
 import type { NormalizedMatch } from '../../src/services/apiFootball.types';
 import {
   fixtureGroups,
-  fixturePhases,
   getMatchesByGroup,
   getMatchesByPhase,
   type MatchPhase,
 } from '../../src/features/mockData';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
+import { getFlagEmoji } from '../../src/theme/theme';
+
+// ── Paleta Argentina
+const CELESTE      = '#6EC6FF';
+const CELESTE_DARK = '#3DA5F5';
+const CELESTE_BG   = '#EBF5FF';
+const DEEP         = '#0F4C81';
 
 // ── Fases para los tabs superiores ───────────────────────────
 const PHASES = ['Fase de Grupos', 'Dieciseisavos', 'Octavos', 'Cuartos', 'Semifinales', 'Final'] as const;
@@ -49,7 +54,7 @@ function MatchRow({ match, onPress }: { match: NormalizedMatch; onPress: () => v
         styles.matchRow,
         {
           backgroundColor: theme.colors.surface,
-          borderColor: match.isLive ? '#22c55e' : theme.colors.border,
+          borderColor: match.isLive ? '#22c55e' : (theme.isDark ? 'rgba(110,198,255,0.12)' : 'rgba(110,198,255,0.2)'),
           opacity: pressed ? 0.88 : 1,
           borderWidth: match.isLive ? 1.5 : 1,
         },
@@ -60,9 +65,7 @@ function MatchRow({ match, onPress }: { match: NormalizedMatch; onPress: () => v
         {match.homeLogo ? (
           <Image source={{ uri: match.homeLogo }} style={styles.teamLogo} resizeMode="contain" />
         ) : (
-          <View style={[styles.teamLogoPlaceholder, { backgroundColor: theme.colors.surfaceAlt }]}>
-            <Text style={[styles.teamCodeText, { color: theme.colors.text }]}>{match.homeCode}</Text>
-          </View>
+          <Text style={styles.flagEmoji}>{getFlagEmoji(match.homeCode)}</Text>
         )}
         <Text style={[styles.teamName, { color: theme.colors.text }]} numberOfLines={2}>
           {match.homeTeam}
@@ -87,9 +90,7 @@ function MatchRow({ match, onPress }: { match: NormalizedMatch; onPress: () => v
         {match.awayLogo ? (
           <Image source={{ uri: match.awayLogo }} style={styles.teamLogo} resizeMode="contain" />
         ) : (
-          <View style={[styles.teamLogoPlaceholder, { backgroundColor: theme.colors.surfaceAlt }]}>
-            <Text style={[styles.teamCodeText, { color: theme.colors.text }]}>{match.awayCode}</Text>
-          </View>
+          <Text style={styles.flagEmoji}>{getFlagEmoji(match.awayCode)}</Text>
         )}
         <Text style={[styles.teamName, styles.teamNameRight, { color: theme.colors.text }]} numberOfLines={2}>
           {match.awayTeam}
@@ -158,8 +159,6 @@ export default function FixtureScreen() {
 
   return (
     <Screen style={styles.screen}>
-      <AppHeader />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -178,9 +177,9 @@ export default function FixtureScreen() {
           <View style={styles.titleRow}>
             <Text style={[styles.pageTitle, { color: theme.colors.text }]}>⚽ Fixture 2026</Text>
             {!hasApiKey && (
-              <Text style={[styles.mockBadge, { backgroundColor: theme.colors.surfaceAlt, color: theme.colors.muted }]}>
-                Demo
-              </Text>
+              <View style={[styles.mockBadge, { backgroundColor: theme.isDark ? 'rgba(110,198,255,0.15)' : CELESTE_BG }]}>
+                <Text style={[styles.mockBadgeText, { color: CELESTE_DARK }]}>Demo</Text>
+              </View>
             )}
           </View>
 
@@ -196,8 +195,8 @@ export default function FixtureScreen() {
                     styles.phaseTab,
                     {
                       backgroundColor: active
-                        ? theme.colors.primary
-                        : theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                        ? CELESTE_DARK
+                        : theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
                     },
                   ]}
                 >
@@ -222,13 +221,13 @@ export default function FixtureScreen() {
                       styles.groupTab,
                       {
                         backgroundColor: active
-                          ? theme.isDark ? 'rgba(204,38,39,0.18)' : 'rgba(204,38,39,0.10)'
+                          ? theme.isDark ? 'rgba(61,165,245,0.18)' : CELESTE_BG
                           : 'transparent',
-                        borderColor: active ? theme.colors.primary : theme.colors.border,
+                        borderColor: active ? CELESTE_DARK : theme.colors.border,
                       },
                     ]}
                   >
-                    <Text style={[styles.groupTabText, { color: active ? theme.colors.primary : theme.colors.textSecondary }]}>
+                    <Text style={[styles.groupTabText, { color: active ? CELESTE_DARK : theme.colors.textSecondary }]}>
                       {group.replace('Grupo ', '')}
                     </Text>
                   </Pressable>
@@ -253,7 +252,7 @@ export default function FixtureScreen() {
               </Text>
               <Pressable
                 onPress={() => refetch()}
-                style={[styles.retryBtn, { backgroundColor: theme.colors.primary }]}
+                style={[styles.retryBtn, { backgroundColor: CELESTE_DARK }]}
               >
                 <Text style={styles.retryBtnText}>Reintentar</Text>
               </Pressable>
@@ -307,11 +306,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mockBadge: {
-    fontSize: 11,
-    fontWeight: '700',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+  },
+  mockBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   tabsRow: { gap: 8, paddingVertical: 2 },
@@ -357,17 +358,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
   },
-  teamLogoPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  teamCodeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  flagEmoji: {
+    fontSize: 36,
+    lineHeight: 44,
   },
   teamName: {
     fontSize: 12,

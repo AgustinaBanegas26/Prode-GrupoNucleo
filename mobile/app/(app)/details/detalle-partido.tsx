@@ -8,6 +8,7 @@ import { Screen } from '../../../src/components/Screen';
 import { useMatchResults } from '../../../src/hooks/useMatchResults';
 import { toMatchItemFromDb } from '../../../src/features/matchesAdapter';
 import { useAppTheme } from '../../../src/providers/ThemeProvider';
+import { getFlagEmoji } from '../../../src/theme/theme';
 
 const resultOptions = ['1-0', '2-0', '2-1', '1-1'];
 const tabs = ['Pronóstico', 'Estadísticas', 'H2H'] as const;
@@ -60,7 +61,7 @@ export default function MatchDetailsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.matchHeader, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
           <View style={styles.teamCard}>
-            <Text style={[styles.teamCode, { color: theme.colors.text }]}>{match.homeCode}</Text>
+            <Text style={styles.teamFlag}>{getFlagEmoji(match.homeCode)}</Text>
             <Text style={[styles.teamName, { color: theme.colors.text }]}>{match.homeTeam}</Text>
           </View>
           <View style={styles.matchInfo}>
@@ -69,7 +70,7 @@ export default function MatchDetailsScreen() {
             <Text style={[styles.stadiumText, { color: theme.colors.muted }]}>{match.stadium}</Text>
           </View>
           <View style={styles.teamCardRight}>
-            <Text style={[styles.teamCode, { color: theme.colors.text }]}>{match.awayCode}</Text>
+            <Text style={styles.teamFlag}>{getFlagEmoji(match.awayCode)}</Text>
             <Text style={[styles.teamName, { color: theme.colors.text }]}>{match.awayTeam}</Text>
           </View>
         </View>
@@ -161,10 +162,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginTop: -72,
   },
-  teamCode: {
-    fontSize: 34,
-    fontWeight: '800',
-    letterSpacing: 1,
+  teamFlag: {
+    fontSize: 64,
+    lineHeight: 72,
   },
   teamName: {
     fontSize: 14,

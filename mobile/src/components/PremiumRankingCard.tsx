@@ -6,6 +6,10 @@ import type { PositionItem } from '../features/mockData';
 import { BadgeIndicator, type BadgeType } from './BadgeIndicator';
 import { radius, shadows, spacing } from '../theme/theme';
 
+const CELESTE      = '#6EC6FF';
+const CELESTE_DARK = '#3DA5F5';
+const CELESTE_BG   = '#EBF5FF';
+
 interface PremiumRankingCardProps {
   item: PositionItem & {
     variation?: number;
@@ -35,14 +39,16 @@ export function PremiumRankingCard({ item }: PremiumRankingCardProps) {
 
   const medal = MEDAL[item.position];
 
-  // Colores para el usuario actual
+  // Colores para el usuario actual — celeste Argentina
   const bgColor = isMe
     ? theme.isDark
-      ? 'rgba(204,38,39,0.10)'
-      : 'rgba(204,38,39,0.06)'
+      ? 'rgba(61,165,245,0.12)'
+      : 'rgba(110,198,255,0.10)'
     : theme.colors.surface;
-  const borderColor = isMe ? theme.colors.primary : theme.colors.border;
-  const shadowStyle = isMe ? shadows.glow : shadows.sm;
+  const borderColor = isMe ? CELESTE_DARK : (theme.isDark ? 'rgba(110,198,255,0.12)' : 'rgba(110,198,255,0.18)');
+  const shadowStyle = isMe
+    ? { shadowColor: CELESTE, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.30, shadowRadius: 10, elevation: 6 }
+    : shadows.sm;
 
   return (
     <View
@@ -64,7 +70,7 @@ export function PremiumRankingCard({ item }: PremiumRankingCardProps) {
       </View>
 
       {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: isMe ? theme.colors.primary : theme.colors.surfaceAlt }]}>
+      <View style={[styles.avatar, { backgroundColor: isMe ? CELESTE_DARK : theme.colors.surfaceAlt }]}>
         <Text style={[styles.avatarText, { color: isMe ? '#fff' : theme.colors.textSecondary }]}>
           {item.name.slice(0, 2).toUpperCase()}
         </Text>
@@ -74,14 +80,14 @@ export function PremiumRankingCard({ item }: PremiumRankingCardProps) {
       <View style={styles.nameBlock}>
         <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
           {item.name}
-          {isMe && <Text style={{ color: theme.colors.primary }}> (Tú)</Text>}
+          {isMe && <Text style={{ color: CELESTE_DARK }}> (Tú)</Text>}
         </Text>
         {item.badge && <BadgeIndicator type={item.badge} animated={false} />}
       </View>
 
       {/* Stats */}
       <View style={styles.statsBlock}>
-        <Text style={[styles.points, { color: isMe ? theme.colors.primary : theme.colors.text }]}>
+        <Text style={[styles.points, { color: isMe ? CELESTE_DARK : theme.colors.text }]}>
           {item.points}
         </Text>
         {variationText && (

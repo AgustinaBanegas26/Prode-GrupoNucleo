@@ -2,6 +2,9 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTheme } from '../providers/ThemeProvider';
+import { getFlagEmoji, getNationalColor } from '../theme/theme';
+
+const CELESTE_DARK = '#3DA5F5';
 
 type Props = {
   homeTeam: string;
@@ -25,38 +28,62 @@ export function MatchCard({
   onPress,
 }: Props) {
   const { theme } = useAppTheme();
+  const homeColor = getNationalColor(homeCode);
+  const awayColor = getNationalColor(awayCode);
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.container,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: pressed ? 0.9 : 1 },
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.isDark ? 'rgba(110,198,255,0.12)' : 'rgba(110,198,255,0.2)',
+          opacity: pressed ? 0.9 : 1,
+        },
       ]}
     >
-      <View style={styles.row}>
-        <View style={styles.flagBlock}>
-          <Text style={[styles.flag, { color: theme.colors.text }]}>{homeCode}</Text>
+      {/* Header: Grupo + Hora */}
+      {group ? (
+        <View style={styles.header}>
+          <View style={[styles.groupBadge, { backgroundColor: theme.isDark ? 'rgba(110,198,255,0.15)' : '#EBF5FF' }]}>
+            <Text style={[styles.groupText, { color: CELESTE_DARK }]}>{group}</Text>
+          </View>
+          <Text style={[styles.timeHeader, { color: theme.colors.textSecondary }]}>{time}</Text>
         </View>
-        <View style={styles.teamColumn}>
-          <Text style={[styles.teamName, { color: theme.colors.text }]}>{homeTeam}</Text>
-          <Text style={[styles.teamCaption, { color: theme.colors.muted }]}>Local</Text>
+      ) : null}
+
+      {/* Equipos */}
+      <View style={styles.teamsRow}>
+        {/* Local */}
+        <View style={styles.teamCol}>
+          <View style={[styles.flagCircle, { backgroundColor: homeColor.bg }]}>
+            <Text style={styles.flagEmoji}>{getFlagEmoji(homeCode)}</Text>
+          </View>
+          <Text style={[styles.teamName, { color: theme.colors.text }]} numberOfLines={2}>
+            {homeTeam}
+          </Text>
+        </View>
+
+        {/* Centro */}
+        <View style={styles.centerCol}>
+          <Text style={[styles.vsText, { color: theme.colors.muted }]}>VS</Text>
+          {!group && (
+            <Text style={[styles.timeCenter, { color: theme.colors.text }]}>{time}</Text>
+          )}
+          <Text style={[styles.dateText, { color: theme.colors.muted }]}>{date}</Text>
+        </View>
+
+        {/* Visitante */}
+        <View style={styles.teamCol}>
+          <View style={[styles.flagCircle, { backgroundColor: awayColor.bg }]}>
+            <Text style={styles.flagEmoji}>{getFlagEmoji(awayCode)}</Text>
+          </View>
+          <Text style={[styles.teamName, { color: theme.colors.text }]} numberOfLines={2}>
+            {awayTeam}
+          </Text>
         </View>
       </View>
-      <View style={styles.middleColumn}>
-        <Text style={[styles.dateText, { color: theme.colors.muted }]}>{date}</Text>
-        <Text style={[styles.timeText, { color: theme.colors.text }]}>{time}</Text>
-      </View>
-      <View style={[styles.row, styles.rightColumn]}>
-        <View style={styles.teamColumnRight}>
-          <Text style={[styles.teamName, { color: theme.colors.text }]}>{awayTeam}</Text>
-          <Text style={[styles.teamCaption, { color: theme.colors.muted }]}>Visitante</Text>
-        </View>
-        <View style={styles.flagBlock}> 
-          <Text style={[styles.flag, { color: theme.colors.text }]}>{awayCode}</Text>
-        </View>
-      </View>
-      {group ? <Text style={[styles.groupLabel, { color: theme.colors.primary }]}>{group}</Text> : null}
     </Pressable>
   );
 }
@@ -64,63 +91,64 @@ export function MatchCard({
 const styles = StyleSheet.create({
   container: {
     borderRadius: 20,
-    padding: 16,
     borderWidth: 1,
     marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#6EC6FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  row: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  groupBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  groupText:  { fontSize: 11, fontWeight: '700' },
+  timeHeader: { fontSize: 12, fontWeight: '600' },
+
+  teamsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
   },
-  flagBlock: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: 'rgba(204, 38, 39, 0.12)',
+  teamCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  flagCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flag: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  teamColumn: {
-    marginLeft: 10,
-  },
-  teamColumnRight: {
-    marginRight: 10,
-    alignItems: 'flex-end',
-  },
-  middleColumn: {
-    marginTop: 12,
-    marginBottom: 12,
-  },
+  flagEmoji: { fontSize: 30 },
   teamName: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  teamCaption: {
     fontSize: 12,
-    marginTop: 4,
-  },
-  dateText: {
-    fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
+    maxWidth: 90,
+    lineHeight: 16,
   },
-  timeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 4,
+  centerCol: {
+    width: 60,
+    alignItems: 'center',
+    gap: 2,
   },
-  rightColumn: {
-    marginTop: -62,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  groupLabel: {
-    marginTop: 10,
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  vsText:     { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  timeCenter: { fontSize: 15, fontWeight: '800' },
+  dateText:   { fontSize: 11, fontWeight: '500' },
 });

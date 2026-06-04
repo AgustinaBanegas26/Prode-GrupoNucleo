@@ -203,10 +203,9 @@ export const shadows = {
  * Glassmorphism tokens
  */
 export const glass = {
-  light: 'rgba(255, 255, 255, 0.82)',
-  dark: 'rgba(20, 20, 20, 0.88)',
+  light: 'rgba(255, 255, 255, 0.72)',
+  dark: 'rgba(30, 30, 30, 0.72)',
   border: 'rgba(255, 255, 255, 0.18)',
-  borderDark: 'rgba(255, 255, 255, 0.08)',
   blur: 20,
 } as const;
 

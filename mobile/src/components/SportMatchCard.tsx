@@ -84,7 +84,6 @@ export function SportMatchCard({
           {/* Local */}
           <View style={[styles.teamSide, { backgroundColor: homeColor.bg }]}>
             <Text style={styles.flagEmoji}>{homeFlag}</Text>
-            <Text style={[styles.teamCode, { color: theme.colors.text }]}>{homeCode}</Text>
             <Text style={[styles.teamName, { color: theme.colors.textSecondary }]} numberOfLines={1}>
               {homeTeam}
             </Text>
@@ -100,7 +99,6 @@ export function SportMatchCard({
           {/* Visitante */}
           <View style={[styles.teamSide, styles.teamSideRight, { backgroundColor: awayColor.bg }]}>
             <Text style={styles.flagEmoji}>{awayFlag}</Text>
-            <Text style={[styles.teamCode, { color: theme.colors.text }]}>{awayCode}</Text>
             <Text style={[styles.teamName, { color: theme.colors.textSecondary }]} numberOfLines={1}>
               {awayTeam}
             </Text>

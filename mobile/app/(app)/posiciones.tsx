@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { GlassHeader, PremiumRankingCard } from '../../src/components';
+import { PremiumRankingCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
 import { rankingData } from '../../src/features/mockData';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { radius, shadows, spacing } from '../../src/theme/theme';
+
+const CELESTE_DARK = '#3DA5F5';
+const DEEP         = '#0F4C81';
 
 export default function RankingsScreen() {
   const { theme } = useAppTheme();
@@ -34,18 +37,12 @@ export default function RankingsScreen() {
 
   return (
     <Screen style={styles.screen}>
-      <GlassHeader
-        userName={userName}
-        userInitials={userInitials.toUpperCase()}
-        position={currentItem?.position ?? 0}
-      />
-
       <View style={styles.container}>
-        {/* Título */}
-        <Text style={[styles.pageTitle, { color: theme.colors.text }]}>Posiciones</Text>
+        {/* Título simple — igual al resto de la app */}
+        <Text style={[styles.pageTitle, { color: theme.colors.text }]}>🏆 Posiciones</Text>
 
         {/* Tabs */}
-        <View style={[styles.tabBar, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+        <View style={[styles.tabBar, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(110,198,255,0.10)' }]}>
           {(['General', 'Semanal'] as const).map((tab) => {
             const isActive = selectedTab === tab;
             return (
@@ -54,7 +51,7 @@ export default function RankingsScreen() {
                 onPress={() => setSelectedTab(tab)}
                 style={[
                   styles.tabItem,
-                  isActive && { backgroundColor: theme.colors.primary, ...shadows.glow },
+                  isActive && { backgroundColor: CELESTE_DARK },
                 ]}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isActive }}
