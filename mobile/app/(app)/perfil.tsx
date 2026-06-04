@@ -152,11 +152,11 @@ export default function ProfileScreen() {
             colors={[CELESTE, CELESTE_DARK, DEEP]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
 
           {/* Franjas horizontales Argentina — celeste/blanco muy sutiles */}
-          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
             {[0, 1, 2, 3, 4].map((i) => (
               <View
                 key={i}

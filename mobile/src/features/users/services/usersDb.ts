@@ -101,3 +101,7 @@ export async function setUserActivo(userId: string, activo: boolean): Promise<vo
     .eq('id', userId);
   if (error) throw error;
 }
+
+export async function ensureDevInitialAdmin(): Promise<void> {
+  // This is a no-op for now - we'll handle initial admin in Supabase
+}

@@ -55,6 +55,7 @@ function labelForModule(m: AdminActivityModule): string {
     auth: 'Auth', users: 'Usuarios', images: 'Imágenes', slider: 'Slider',
     news: 'Noticias', rewards: 'Premios', rankings: 'Rankings',
     reports: 'Reportes', participation: 'Participación', branding: 'Branding',
+    matches: 'Partidos', notifications: 'Notificaciones',
   };
   return map[m] ?? m;
 }
