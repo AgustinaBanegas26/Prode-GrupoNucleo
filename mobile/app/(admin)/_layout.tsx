@@ -1,5 +1,6 @@
 import React from 'react';
 import { Redirect, Stack } from 'expo-router';
+
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import { useAuth } from '../../src/providers/AuthProvider';
 
@@ -10,19 +11,16 @@ export default function AdminLayout() {
     return <LoadingScreen />;
   }
 
-  const hasAdminSession = user && user.role === 'admin';
-
-  if (!hasAdminSession) {
+  if (!user) {
     return <Redirect href="/(auth)/login" />;
   }
 
+  if (user.role !== 'admin') {
+    return <Redirect href="/(app)" />;
+  }
+
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="login" />
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="users" />
       <Stack.Screen name="statistics" />
@@ -36,6 +34,8 @@ export default function AdminLayout() {
       <Stack.Screen name="slider" />
       <Stack.Screen name="news" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="matches" />
+      <Stack.Screen name="notifications" />
     </Stack>
   );
 }

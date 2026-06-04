@@ -2,6 +2,7 @@
   "expo": {
     "name": "Prode Grupo Núcleo",
     "slug": "prode-grupo-nucleo",
+    "scheme": "prode-grupo-nucleo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

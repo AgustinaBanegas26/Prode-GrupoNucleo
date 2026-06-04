@@ -38,6 +38,14 @@ cd mobile
 npm run start
 ```
 
+## Recuperación de contraseña (Supabase Auth)
+
+Configuración, plantilla de email y migraciones SQL:
+
+- `mobile/docs/SUPABASE_PASSWORD_RECOVERY.md`
+- `mobile/supabase/email-templates/password-reset.html`
+- `mobile/supabase/migrations/002_password_recovery.sql`
+
 ## Assets requeridos
 
 Los logos se encuentran en:

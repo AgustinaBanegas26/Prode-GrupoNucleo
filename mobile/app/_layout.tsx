@@ -8,6 +8,13 @@ import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 
+const PUBLIC_AUTH_ROUTES = new Set([
+  'login',
+  'forgot-password',
+  'reset-password',
+  'first-access',
+]);
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
@@ -18,21 +25,46 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (loading) return;
 
     const root = segments[0];
+    const authRoute = segments[1];
     const inAuthGroup = root === '(auth)';
     const inAppGroup = root === '(app)';
+    const inAdminGroup = root === '(admin)';
 
-    if (!user && inAppGroup) {
+    if (!user && (inAppGroup || inAdminGroup)) {
       router.replace('/(auth)/login');
+      return;
+    }
+
+    if (user?.mustChangePassword) {
+      if (authRoute !== 'force-change-password') {
+        router.replace('/(auth)/force-change-password');
+      }
       return;
     }
 
     if (user && (inAuthGroup || !root)) {
-      router.replace('/(app)');
+      const isPublicAuthRoute = authRoute ? PUBLIC_AUTH_ROUTES.has(authRoute) : false;
+      if (!isPublicAuthRoute) {
+        if (user.role === 'admin') {
+          router.replace('/(admin)');
+        } else {
+          router.replace('/(app)');
+        }
+        return;
+      }
+      if (isPublicAuthRoute) {
+        if (user.role === 'admin') {
+          router.replace('/(admin)');
+        } else {
+          router.replace('/(app)');
+        }
+      }
       return;
     }
 
-    if (!user && !root) {
-      router.replace('/(auth)/login');
+    if (user && user.role === 'admin' && inAppGroup) {
+      router.replace('/(admin)');
+      return;
     }
   }, [loading, router, user, segments.join('/')]);
 
