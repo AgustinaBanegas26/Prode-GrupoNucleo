@@ -109,6 +109,15 @@ async function fetchFixtures(params) {
   return data.response;
 }
 
+async function fetchFixturesPaged(params) {
+  const client = apiClient();
+  const res = await withRetry(() => client.get('/fixtures', { params }));
+  const data = res?.data;
+  const fixtures = data && Array.isArray(data.response) ? data.response : [];
+  const pagingTotal = typeof data?.paging?.total === 'number' ? data.paging.total : 1;
+  return { fixtures, pagingTotal };
+}
+
 /**
  * syncFinishedMatches():
  * - consulta API-Football (principalmente status=FT)
@@ -203,9 +212,49 @@ async function syncTodayMatches() {
 }
 
 /**
+ * syncAllMatches():
+ * - trae todo el fixture del season (paginado) y hace upsert
+ * - útil para poblar la app con TODOS los partidos predecibles desde el día 1
+ */
+async function syncAllMatches() {
+  const supabase = getSupabaseAdminClient();
+
+  try {
+    const first = await fetchFixturesPaged({ league: LEAGUE_ID, season: SEASON, page: 1 });
+    const all = [...first.fixtures];
+    const totalPages = Math.max(first.pagingTotal || 1, 1);
+
+    for (let page = 2; page <= totalPages; page += 1) {
+      const { fixtures } = await fetchFixturesPaged({ league: LEAGUE_ID, season: SEASON, page });
+      all.push(...fixtures);
+    }
+
+    const rows = all
+      .map(toMatchRow)
+      .filter((r) => r.fixture_id && r.home_team && r.away_team && r.match_date);
+
+    if (rows.length === 0) {
+      log('0 partidos del fixture sincronizados');
+      return { updated: 0 };
+    }
+
+    const { error } = await supabase.from('matches').upsert(rows, { onConflict: 'fixture_id' });
+    if (error) {
+      throw new Error(`Supabase upsert error: ${error.message}`);
+    }
+
+    log(`${rows.length} partidos del fixture sincronizados`);
+    return { updated: rows.length };
+  } catch (e) {
+    logError('Error en syncAllMatches', e);
+    throw e;
+  }
+}
+
+/**
  * startSyncCron():
  * - Cada 2 minutos: syncFinishedMatches()
- * - Todos los días 06:00 UTC: syncTodayMatches()
+ * - Todos los días 06:00 UTC: syncAllMatches() (puebla fixture completo)
  */
 function startSyncCron() {
   try {
@@ -230,7 +279,7 @@ function startSyncCron() {
       '0 6 * * *',
       async () => {
         try {
-          await syncTodayMatches();
+          await syncAllMatches();
         } catch (_) {
           // error ya logueado en sync
         }
@@ -249,5 +298,5 @@ module.exports = {
   startSyncCron,
   syncFinishedMatches,
   syncTodayMatches,
+  syncAllMatches,
 };
-
