@@ -20,19 +20,28 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const root = segments[0];
     const inAuthGroup = root === '(auth)';
     const inAppGroup = root === '(app)';
+    const inAdminGroup = root === '(admin)';
 
-    if (!user && inAppGroup) {
+    // Not logged in — redirect to login if trying to access protected routes
+    if (!user && (inAppGroup || inAdminGroup)) {
       router.replace('/(auth)/login');
       return;
     }
 
+    // Logged in — redirect away from auth screens
     if (user && (inAuthGroup || !root)) {
-      router.replace('/(app)');
+      if (user.role === 'admin') {
+        router.replace('/(admin)');
+      } else {
+        router.replace('/(app)');
+      }
       return;
     }
 
-    if (!user && !root) {
-      router.replace('/(auth)/login');
+    // Admin trying to access user app — redirect to admin panel
+    if (user && user.role === 'admin' && inAppGroup) {
+      router.replace('/(admin)');
+      return;
     }
   }, [loading, router, user, segments.join('/')]);
 

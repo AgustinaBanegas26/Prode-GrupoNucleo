@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassHeader } from '../../../components/GlassHeader';
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { useAuthStore } from '../../../store/authStore';
+import { useAuth } from '../../../providers/AuthProvider';
 import { radius, shadows, spacing } from '../../../theme/theme';
 import { type NewsItem, useNewsStore } from '../store/newsStore';
 
@@ -24,13 +24,11 @@ export function NewsListScreen() {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const items = useNewsStore((s) => s.items);
-  const session = useAuthStore((s) => s.session);
+  const { user } = useAuth();
   const [selected, setSelected] = useState<NewsItem | null>(null);
 
-  const nombre = session?.user.nombre ?? '';
-  const apellido = session?.user.apellido ?? '';
-  const fullName = `${nombre} ${apellido}`.trim() || 'Usuario';
-  const initials = `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase() || 'U';
+  const fullName = user?.nombre ?? 'Usuario';
+  const initials = fullName.slice(0, 2).toUpperCase();
 
   const published = useMemo(
     () => items.filter((n) => n.status === 'published').sort((a, b) => b.date - a.date),

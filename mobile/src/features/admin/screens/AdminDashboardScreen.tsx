@@ -12,7 +12,7 @@ import { useRewardsStore } from '../../content/store/rewardsStore';
 import { useSliderStore } from '../../content/store/sliderStore';
 import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
-import { useAuthStore } from '../../../store/authStore';
+import { useAuth } from '../../../providers/AuthProvider';
 
 type MenuOption = {
   id: string;

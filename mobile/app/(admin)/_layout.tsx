@@ -2,21 +2,20 @@ import React from 'react';
 import { Redirect, Stack } from 'expo-router';
 
 import { LoadingScreen } from '../../src/components/LoadingScreen';
-import { useAuthStore } from '../../src/store/authStore';
+import { useAuth } from '../../src/providers/AuthProvider';
 
 export default function AdminLayout() {
-  const session = useAuthStore((s) => s.session);
-  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const { user, loading } = useAuth();
 
-  if (!isHydrated) {
+  if (loading) {
     return <LoadingScreen />;
   }
 
-  if (!session) {
+  if (!user) {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (session.user.rol !== 'admin') {
+  if (user.role !== 'admin') {
     return <Redirect href="/(app)" />;
   }
 

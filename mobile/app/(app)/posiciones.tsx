@@ -5,21 +5,16 @@ import { GlassHeader, PremiumRankingCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
 import { rankingData } from '../../src/features/mockData';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
-import { useAuthStore } from '../../src/store/authStore';
+import { useAuth } from '../../src/providers/AuthProvider';
 import { radius, shadows, spacing } from '../../src/theme/theme';
 
 export default function RankingsScreen() {
   const { theme } = useAppTheme();
   const [selectedTab, setSelectedTab] = useState<'General' | 'Semanal'>('General');
-  const session = useAuthStore((s) => s.session);
+  const { user } = useAuth();
 
-  const userName = session?.user
-    ? `${session.user.nombre} ${session.user.apellido}`
-    : 'Usuario';
-  const userInitials = session?.user
-    ? `${session.user.nombre[0] ?? ''}${session.user.apellido[0] ?? ''}`
-    : 'U';
-
+  const userName = user?.nombre ?? 'Usuario';
+  const userInitials = userName.slice(0, 2).toUpperCase();
   const currentItem = rankingData.find((r) => r.isCurrent);
 
   // Stagger animation para las tarjetas
