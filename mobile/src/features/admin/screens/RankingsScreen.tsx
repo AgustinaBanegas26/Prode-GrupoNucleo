@@ -1,11 +1,11 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { rankingData } from '../../mockData';
+import { useRanking, useRankingRealtime } from '../../content/api/ranking';
 
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
@@ -13,26 +13,7 @@ const DEEP_BLUE    = '#0F4C81';
 const DORADO       = '#F59E0B';
 const PLATA        = '#94A3B8';
 
-type RankingPeriod = 'General' | 'Semanal' | 'Mensual';
-type RankingRow    = { id: string; position: number; name: string; points: number; played: number; diff: number; isCurrent?: boolean };
-
-function derivePoints(points: number, period: RankingPeriod) {
-  if (period === 'Semanal') return Math.round(points * 0.35);
-  if (period === 'Mensual') return Math.round(points * 0.6);
-  return points;
-}
-
-function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
-  const opacity    = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 380, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 380, delay, useNativeDriver: true }),
-    ]).start();
-  }, []);
-  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
-}
+type RankingPeriod = 'general' | 'semanal' | 'mensual';
 
 function medalColor(pos: number) {
   if (pos === 1) return DORADO;
@@ -45,106 +26,88 @@ export function RankingsScreen() {
   const { theme } = useAppTheme();
   const isDark    = theme.isDark;
   const router    = useRouter();
-  const [period, setPeriod] = useState<RankingPeriod>('General');
+  const [period, setPeriod] = useState<RankingPeriod>('general');
   const [query,  setQuery]  = useState('');
 
-  const rows = useMemo(() => {
+  const { data: ranking = [] } = useRanking(period);
+  useRankingRealtime();
+
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const mapped: RankingRow[] = rankingData
-      .map((r) => ({ ...r, points: derivePoints(r.points, period) }))
-      .sort((a, b) => b.points - a.points)
-      .map((r, idx) => ({ ...r, position: idx + 1 }));
-    return mapped.filter((r) => (!q ? true : r.name.toLowerCase().includes(q)));
-  }, [period, query]);
+    return ranking.filter(item => !q || item.userName.toLowerCase().includes(q));
+  }, [ranking, query]);
 
   const bg         = isDark ? '#0D0D0D' : '#F5F7FA';
   const cardBg     = isDark ? 'rgba(255,255,255,0.05)' : '#fff';
   const cardBorder = isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)';
   const searchBg   = isDark ? 'rgba(255,255,255,0.06)' : '#fff';
+  const textMuted  = theme.colors.muted;
 
   return (
     <ScrollView style={[s.root, { backgroundColor: bg }]} showsVerticalScrollIndicator={false}>
 
-      {/* ── Header ──────────────────────────────────────── */}
       <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
         <View style={s.circleL} />
         <View style={s.circleS} />
-        <FadeSlide delay={0}>
-          <View style={s.headerRow}>
-            <Pressable onPress={() => router.push('/(admin)')} style={s.backBtn}>
-              <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
-            </Pressable>
-            <View style={[s.iconBox, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
-              <MaterialCommunityIcons name="trophy" size={22} color="#fff" />
-            </View>
-            <View>
-              <Text style={s.title}>Rankings</Text>
-              <Text style={s.sub}>{rows.length} clasificados</Text>
-            </View>
+        <View style={s.headerRow}>
+          <Pressable onPress={() => router.push('/(admin)')} style={s.backBtn}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <View style={[s.iconBox, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+            <MaterialCommunityIcons name="trophy" size={22} color="#fff" />
           </View>
-        </FadeSlide>
+          <View>
+            <Text style={s.title}>Rankings</Text>
+            <Text style={s.sub}>{filtered.length} clasificados</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       <View style={[s.content, { backgroundColor: bg }]}>
 
-        {/* Tabs de período — mismo estilo que posiciones.tsx */}
-        <FadeSlide delay={40}>
-          <View style={[s.tabBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(110,198,255,0.10)' }]}>
-            {(['General', 'Semanal', 'Mensual'] as const).map((p) => {
-              const active = period === p;
-              return (
-                <Pressable key={p} onPress={() => setPeriod(p)}
-                  style={[s.tabItem, active && { backgroundColor: CELESTE_DARK }]}>
-                  <Text style={[s.tabText, { color: active ? '#fff' : theme.colors.textSecondary }]}>{p}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </FadeSlide>
-
-        {/* Búsqueda */}
-        <FadeSlide delay={80}>
-          <View style={[s.searchBox, { backgroundColor: searchBg, borderColor: isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.3)', shadowColor: CELESTE }]}>
-            <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.muted} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Buscar usuario"
-              placeholderTextColor={theme.colors.placeholder}
-              style={[s.searchInput, { color: theme.colors.text }]}
-              autoCapitalize="none"
-            />
-          </View>
-        </FadeSlide>
-
-        {/* Cabecera tabla — mismo formato que posiciones.tsx */}
-        <View style={s.tableHeader}>
-          <Text style={[s.th, { color: theme.colors.muted }]}>#</Text>
-          <Text style={[s.th, s.thUser, { color: theme.colors.muted }]}>Usuario</Text>
-          <Text style={[s.th, { color: theme.colors.muted, textAlign: 'right' }]}>Pts</Text>
-          <Text style={[s.th, { color: theme.colors.muted, textAlign: 'right' }]}>PJ</Text>
+        <View style={[s.tabBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(110,198,255,0.10)' }]}>
+          {(['general', 'semanal', 'mensual'] as const).map((p) => {
+            const active = period === p;
+            return (
+              <Pressable key={p} onPress={() => setPeriod(p)}
+                style={[s.tabItem, active && { backgroundColor: CELESTE_DARK }]}>
+                <Text style={[s.tabText, { color: active ? '#fff' : theme.colors.textSecondary }]}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* Lista */}
+        <View style={[s.searchBox, { backgroundColor: searchBg, borderColor: isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.3)', shadowColor: CELESTE }]}>
+          <MaterialCommunityIcons name="magnify" size={18} color={textMuted} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Buscar usuario"
+            placeholderTextColor={theme.colors.placeholder}
+            style={[s.searchInput, { color: theme.colors.text }]}
+            autoCapitalize="none"
+          />
+        </View>
+
+        <View style={s.tableHeader}>
+          <Text style={[s.th, { color: textMuted }]}>#</Text>
+          <Text style={[s.th, s.thUser, { color: textMuted }]}>Usuario</Text>
+          <Text style={[s.th, { color: textMuted, textAlign: 'right' }]}>Pts</Text>
+          <Text style={[s.th, { color: textMuted, textAlign: 'right' }]}>PJ</Text>
+        </View>
+
         <View style={s.list}>
-          {rows.map((r, idx) => {
-            const medal  = medalColor(r.position);
-            const isCurr = r.isCurrent;
+          {filtered.map((item) => {
+            const medal = medalColor(item.position);
             return (
-              <FadeSlide key={r.id} delay={idx * 30}>
-                <Animated.View>
-                  <View style={[s.row, {
-                    backgroundColor: isCurr ? (isDark ? 'rgba(61,165,245,0.12)' : '#EBF5FF') : cardBg,
-                    borderColor:     isCurr ? CELESTE_DARK : cardBorder,
-                    shadowColor: CELESTE,
-                  }]}>
-                    <Text style={[s.rank, { color: medal }]}>{r.position}</Text>
-                    <Text style={[s.rowName, { color: theme.colors.text }]} numberOfLines={1}>{r.name}</Text>
-                    <Text style={[s.rowPts, { color: CELESTE_DARK }]}>{r.points}</Text>
-                    <Text style={[s.rowPj,  { color: theme.colors.muted }]}>{r.played}</Text>
-                  </View>
-                </Animated.View>
-              </FadeSlide>
+              <View key={item.id} style={[s.row, { backgroundColor: cardBg, borderColor: cardBorder, shadowColor: CELESTE }]}>
+                <Text style={[s.rank, { color: medal }]}>{item.position}</Text>
+                <Text style={[s.rowName, { color: theme.colors.text }]} numberOfLines={1}>{item.userName}</Text>
+                <Text style={[s.rowPts, { color: CELESTE_DARK }]}>{item.points}</Text>
+                <Text style={[s.rowPj, { color: textMuted }]}>{item.played}</Text>
+              </View>
             );
           })}
         </View>

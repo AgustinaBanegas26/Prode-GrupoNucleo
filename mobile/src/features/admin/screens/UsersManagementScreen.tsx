@@ -71,7 +71,7 @@ export function UsersManagementScreen() {
 
   const openCreate = () => { setForm(makeEmptyUser()); setModalVisible(true); };
   const openEdit   = (u: AppUser) => {
-    setForm({ id: u.id, numeroEmpleado: u.numeroEmpleado, nombre: u.nombre, apellido: u.apellido, rol: u.rol, activo: u.activo });
+    setForm({ id: u.id, numeroEmpleado: u.numeroEmpleado, nombre: u.nombre, apellido: u.apellido, email: u.email, empresa: u.empresa, rol: u.rol, activo: u.activo });
     setModalVisible(true);
   };
 
@@ -255,9 +255,11 @@ export function UsersManagementScreen() {
             </View>
 
             <View style={m.body}>
-              <TextField label="Número de empleado" value={form.numeroEmpleado} onChangeText={(v) => setForm((p) => ({ ...p, numeroEmpleado: v }))} keyboardType="number-pad" />
-              <TextField label="Nombre"   value={form.nombre}   onChangeText={(v) => setForm((p) => ({ ...p, nombre: v }))} />
-              <TextField label="Apellido" value={form.apellido} onChangeText={(v) => setForm((p) => ({ ...p, apellido: v }))} />
+              <TextField label="Número de empleado" value={form.numeroEmpleado} onChangeText={(v) => setForm((p) => ({ ...p, numeroEmpleado: v })} keyboardType="number-pad" />
+              <TextField label="Nombre"   value={form.nombre}   onChangeText={(v) => setForm((p) => ({ ...p, nombre: v })} />
+              <TextField label="Apellido" value={form.apellido} onChangeText={(v) => setForm((p) => ({ ...p, apellido: v })} />
+              <TextField label="Email" value={form.email || ''} onChangeText={(v) => setForm((p) => ({ ...p, email: v }))} autoCapitalize="none" autoComplete="email" />
+              <TextField label="Empresa" value={form.empresa || ''} onChangeText={(v) => setForm((p) => ({ ...p, empresa: v }))} />
 
               <View style={m.pillRow}>
                 {([true, false] as const).map((st) => (

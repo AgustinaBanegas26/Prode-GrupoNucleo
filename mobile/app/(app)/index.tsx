@@ -1,5 +1,11 @@
-import { useRouter } from 'expo-router';
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from "expo-router";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Animated,
   Dimensions,
@@ -11,63 +17,52 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+} from "react-native";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
-import { Screen } from '../../src/components/Screen';
-import { getUpcomingMatches } from '../../src/features/mockData';
-import { useAppTheme } from '../../src/providers/ThemeProvider';
-import { useAuth } from '../../src/providers/AuthProvider';
-import { getGreeting, getFlagEmoji } from '../../src/theme/theme';
+import { Screen } from "../../src/components/Screen";
+import { getUpcomingMatches } from "../../src/features/mockData";
+import { useAppTheme } from "../../src/providers/ThemeProvider";
+import { useAuth } from "../../src/providers/AuthProvider";
+import { getGreeting, getFlagEmoji } from "../../src/theme/theme";
+import {
+  useSliderSlides,
+  useSliderRealtime,
+} from "../../src/features/content/api/sliderSlides";
 
 // ── Paleta Argentina (separada del rojo) ──────────────────────
-const CELESTE      = '#6EC6FF';
-const CELESTE_DARK = '#3DA5F5';
-const DEEP_BLUE    = '#0F4C81';
-const RED          = '#CC2627';
-const BANNER_H     = 200;
-
-// ── Banners — celeste/blanco para arg, rojo solo para Núcleo ──
-const WC_BANNERS = [
-  {
-    id: 'b1',
-    emoji: '⚽',
-    title: 'Copa Mundial FIFA 2026',
-    subtitle: '11 Jun – 19 Jul · Canadá, México y EE.UU.',
-    bg: [DEEP_BLUE, CELESTE_DARK] as [string, string],
-    route: '/(app)/fixture',
-    accent: CELESTE,
-  },
-  {
-    id: 'b2',
-    emoji: '🎯',
-    title: 'Hacé tu pronóstico',
-    subtitle: 'Predecí resultados y sumá puntos',
-    bg: ['#0a3460', DEEP_BLUE] as [string, string],
-    route: '/(app)/pronosticos',
-    accent: CELESTE,
-  },
-  {
-    id: 'b3',
-    emoji: '🏆',
-    title: 'Tabla de posiciones',
-    subtitle: 'Mirá cómo vas en el ranking general',
-    bg: ['#1a5c2a', '#0d3518'] as [string, string],
-    route: '/(app)/posiciones',
-    accent: '#22C55E',
-  },
-];
+const CELESTE = "#6EC6FF";
+const CELESTE_DARK = "#3DA5F5";
+const DEEP_BLUE = "#0F4C81";
+const RED = "#CC2627";
+const BANNER_H = 200;
 
 // ── Animación fade+slide ───────────────────────────────────────
-function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
-  const opacity    = useRef(new Animated.Value(0)).current;
+function FadeSlide({
+  delay = 0,
+  children,
+}: {
+  delay?: number;
+  children: React.ReactNode;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 380, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 380, delay, useNativeDriver: true }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 380,
+        delay,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 380,
+        delay,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, []);
 
@@ -80,21 +75,28 @@ function FadeSlide({ delay = 0, children }: { delay?: number; children: React.Re
 
 // ── Carrusel de banners ────────────────────────────────────────
 function WCBanner() {
-  const router   = useRouter();
-  const flatRef  = useRef<FlatList>(null);
-  const [active, setActive]       = useState(0);
-  const [itemWidth, setItemWidth] = useState(Dimensions.get('window').width - 32);
+  const router = useRouter();
+  const { data: slides = [] } = useSliderSlides();
+  useSliderRealtime();
+  const flatRef = useRef<FlatList>(null);
+  const [active, setActive] = useState(0);
+  const [itemWidth, setItemWidth] = useState(
+    Dimensions.get("window").width - 32,
+  );
+
+  const activeSlides = slides.filter((s) => s.active);
 
   useEffect(() => {
+    if (activeSlides.length <= 1) return;
     const id = setInterval(() => {
       setActive((prev) => {
-        const next = (prev + 1) % WC_BANNERS.length;
+        const next = (prev + 1) % activeSlides.length;
         flatRef.current?.scrollToIndex({ index: next, animated: true });
         return next;
       });
     }, 4500);
     return () => clearInterval(id);
-  }, []);
+  }, [activeSlides.length]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -109,11 +111,22 @@ function WCBanner() {
 
   const viewConfig = useMemo(() => ({ itemVisiblePercentThreshold: 50 }), []);
 
+  const handlePress = (slide: any) => {
+    if (slide.button?.internalLink) {
+      router.push(slide.button.internalLink as any);
+    } else if (slide.button?.externalLink) {
+      // For external links, we'd need Linking, but let's keep it simple for now
+      console.log("External link:", slide.button.externalLink);
+    }
+  };
+
+  if (activeSlides.length === 0) return null;
+
   return (
     <View style={bannerS.wrapper} onLayout={onLayout}>
       <FlatList
         ref={flatRef}
-        data={WC_BANNERS}
+        data={activeSlides}
         horizontal
         pagingEnabled={false}
         showsHorizontalScrollIndicator={false}
@@ -130,41 +143,60 @@ function WCBanner() {
         })}
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => router.push(item.route as any)}
+            onPress={() => handlePress(item)}
             style={[bannerS.bannerItem, { width: itemWidth, marginRight: 12 }]}
           >
-            <LinearGradient
-              colors={item.bg}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={bannerS.gradient}
-            >
+            <View style={bannerS.gradient}>
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={["rgba(0,0,0,0.3)", "rgba(15,76,129,0.85)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+
               {/* Decoración geométrica */}
-              <View style={[bannerS.circle, { borderColor: item.accent + '30' }]} />
-              <View style={[bannerS.circleSmall, { borderColor: item.accent + '20' }]} />
+              <View style={[bannerS.circle, { borderColor: CELESTE + "30" }]} />
+              <View
+                style={[bannerS.circleSmall, { borderColor: CELESTE + "20" }]}
+              />
 
               <View style={bannerS.row}>
                 <View style={bannerS.textBlock}>
-                  <Text style={bannerS.emoji}>{item.emoji}</Text>
                   <Text style={bannerS.title}>{item.title}</Text>
-                  <Text style={bannerS.subtitle}>{item.subtitle}</Text>
+                  {item.description ? (
+                    <Text style={bannerS.subtitle}>{item.description}</Text>
+                  ) : null}
                 </View>
-                <View style={[bannerS.arrow, { backgroundColor: item.accent + '25' }]}>
-                  <Ionicons name="chevron-forward" size={20} color={item.accent} />
-                </View>
+                {item.button?.enabled ? (
+                  <View
+                    style={[bannerS.arrow, { backgroundColor: CELESTE + "25" }]}
+                  >
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color={CELESTE}
+                    />
+                  </View>
+                ) : null}
               </View>
-            </LinearGradient>
+            </View>
           </Pressable>
         )}
       />
       <View style={bannerS.dots}>
-        {WC_BANNERS.map((b, i) => (
+        {activeSlides.map((b, i) => (
           <View
             key={i}
             style={[
               bannerS.dot,
               {
-                backgroundColor: i === active ? CELESTE : 'rgba(110,198,255,0.25)',
+                backgroundColor:
+                  i === active ? CELESTE : "rgba(110,198,255,0.25)",
                 width: i === active ? 22 : 6,
               },
             ]}
@@ -176,16 +208,16 @@ function WCBanner() {
 }
 
 const bannerS = StyleSheet.create({
-  wrapper:    { marginBottom: 8 },
-  bannerItem: { overflow: 'hidden', borderRadius: 22 },
+  wrapper: { marginBottom: 8 },
+  bannerItem: { overflow: "hidden", borderRadius: 22 },
   gradient: {
     height: BANNER_H,
     padding: 22,
-    justifyContent: 'flex-end',
-    position: 'relative',
+    justifyContent: "flex-end",
+    position: "relative",
   },
   circle: {
-    position: 'absolute',
+    position: "absolute",
     width: 180,
     height: 180,
     borderRadius: 90,
@@ -194,7 +226,7 @@ const bannerS = StyleSheet.create({
     right: -40,
   },
   circleSmall: {
-    position: 'absolute',
+    position: "absolute",
     width: 100,
     height: 100,
     borderRadius: 50,
@@ -203,25 +235,34 @@ const bannerS = StyleSheet.create({
     right: 60,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
   },
   textBlock: { gap: 4 },
-  emoji:    { fontSize: 36, marginBottom: 4 },
-  title:    { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  subtitle: { color: 'rgba(255,255,255,0.68)', fontSize: 12, fontWeight: '500' },
+  emoji: { fontSize: 36, marginBottom: 4 },
+  title: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 12,
+    fontWeight: "500",
+  },
   arrow: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 6,
     marginTop: 12,
   },
@@ -229,15 +270,30 @@ const bannerS = StyleSheet.create({
 });
 
 // ── Card partido próximo ───────────────────────────────────────
-function UpcomingMatchCard({ match, onPress }: {
+function UpcomingMatchCard({
+  match,
+  onPress,
+}: {
   match: ReturnType<typeof getUpcomingMatches>[number];
   onPress: () => void;
 }) {
   const { theme } = useAppTheme();
   const scale = useRef(new Animated.Value(1)).current;
 
-  const onPressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, damping: 15, stiffness: 300 }).start();
+  const onPressIn = () =>
+    Animated.spring(scale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 300,
+    }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 300,
+    }).start();
 
   return (
     <Animated.View style={{ transform: [{ scale }], marginBottom: 10 }}>
@@ -249,23 +305,41 @@ function UpcomingMatchCard({ match, onPress }: {
           upS.card,
           {
             backgroundColor: theme.colors.surface,
-            borderColor: theme.isDark ? 'rgba(110,198,255,0.12)' : 'rgba(110,198,255,0.2)',
+            borderColor: theme.isDark
+              ? "rgba(110,198,255,0.12)"
+              : "rgba(110,198,255,0.2)",
           },
         ]}
       >
         {/* Grupo + hora */}
         <View style={upS.headerRow}>
-          <View style={[upS.groupBadge, { backgroundColor: theme.isDark ? 'rgba(110,198,255,0.15)' : '#EBF5FF' }]}>
-            <Text style={[upS.groupText, { color: CELESTE_DARK }]}>{match.group ?? match.phase}</Text>
+          <View
+            style={[
+              upS.groupBadge,
+              {
+                backgroundColor: theme.isDark
+                  ? "rgba(110,198,255,0.15)"
+                  : "#EBF5FF",
+              },
+            ]}
+          >
+            <Text style={[upS.groupText, { color: CELESTE_DARK }]}>
+              {match.group ?? match.phase}
+            </Text>
           </View>
-          <Text style={[upS.timeText, { color: theme.colors.textSecondary }]}>{match.time} · {match.date}</Text>
+          <Text style={[upS.timeText, { color: theme.colors.textSecondary }]}>
+            {match.time} · {match.date}
+          </Text>
         </View>
 
         {/* Equipos */}
         <View style={upS.teamsRow}>
           <View style={upS.teamCol}>
             <Text style={upS.flag}>{getFlagEmoji(match.homeCode)}</Text>
-            <Text style={[upS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
+            <Text
+              style={[upS.teamName, { color: theme.colors.text }]}
+              numberOfLines={1}
+            >
               {match.homeTeam}
             </Text>
           </View>
@@ -276,7 +350,10 @@ function UpcomingMatchCard({ match, onPress }: {
 
           <View style={upS.teamCol}>
             <Text style={upS.flag}>{getFlagEmoji(match.awayCode)}</Text>
-            <Text style={[upS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
+            <Text
+              style={[upS.teamName, { color: theme.colors.text }]}
+              numberOfLines={1}
+            >
               {match.awayTeam}
             </Text>
           </View>
@@ -285,7 +362,9 @@ function UpcomingMatchCard({ match, onPress }: {
         {/* Estadio */}
         <View style={upS.footer}>
           <Feather name="map-pin" size={11} color={theme.colors.muted} />
-          <Text style={[upS.stadium, { color: theme.colors.muted }]}>{match.stadium}</Text>
+          <Text style={[upS.stadium, { color: theme.colors.muted }]}>
+            {match.stadium}
+          </Text>
         </View>
       </Pressable>
     </Animated.View>
@@ -296,17 +375,17 @@ const upS = StyleSheet.create({
   card: {
     borderRadius: 20,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
     shadowColor: CELESTE,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 3,
   },
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 8,
@@ -316,60 +395,72 @@ const upS = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  groupText: { fontSize: 11, fontWeight: '700' },
-  timeText:  { fontSize: 12, fontWeight: '500' },
+  groupText: { fontSize: 11, fontWeight: "700" },
+  timeText: { fontSize: 12, fontWeight: "500" },
   teamsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingBottom: 10,
     gap: 8,
   },
   teamCol: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 6,
   },
   flag: { fontSize: 36 },
   teamName: {
     fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
     maxWidth: 90,
   },
-  vsCol: { width: 40, alignItems: 'center' },
-  vs:    { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+  vsCol: { width: 40, alignItems: "center" },
+  vs: { fontSize: 12, fontWeight: "800", letterSpacing: 1 },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  stadium: { fontSize: 11, fontWeight: '400' },
+  stadium: { fontSize: 11, fontWeight: "400" },
 });
 
 // ── Sponsors slider continuo ──────────────────────────────────
 const SPONSORS = [
-  { id: 's1', source: require('../../images/ezviz-seeklogo.png'),     name: 'EZVIZ'   },
-  { id: 's2', source: require('../../images/KANY.png'),               name: 'KANY'    },
-  { id: 's3', source: require('../../images/PANTUM_ROJO.png'),        name: 'PANTUM'  },
-  { id: 's4', source: require('../../images/PCBOX.png'),              name: 'PCBOX'   },
+  {
+    id: "s1",
+    source: require("../../images/ezviz-seeklogo.png"),
+    name: "EZVIZ",
+  },
+  { id: "s2", source: require("../../images/KANY.png"), name: "KANY" },
+  { id: "s3", source: require("../../images/PANTUM_ROJO.png"), name: "PANTUM" },
+  { id: "s4", source: require("../../images/PCBOX.png"), name: "PCBOX" },
   // duplicados para loop infinito visual
-  { id: 's5', source: require('../../images/ezviz-seeklogo.png'),     name: 'EZVIZ2'  },
-  { id: 's6', source: require('../../images/KANY.png'),               name: 'KANY2'   },
-  { id: 's7', source: require('../../images/PANTUM_ROJO.png'),        name: 'PANTUM2' },
-  { id: 's8', source: require('../../images/PCBOX.png'),              name: 'PCBOX2'  },
+  {
+    id: "s5",
+    source: require("../../images/ezviz-seeklogo.png"),
+    name: "EZVIZ2",
+  },
+  { id: "s6", source: require("../../images/KANY.png"), name: "KANY2" },
+  {
+    id: "s7",
+    source: require("../../images/PANTUM_ROJO.png"),
+    name: "PANTUM2",
+  },
+  { id: "s8", source: require("../../images/PCBOX.png"), name: "PCBOX2" },
 ];
 
-const LOGO_W   = 100;
-const LOGO_H   = 52;
+const LOGO_W = 100;
+const LOGO_H = 52;
 const LOGO_GAP = 20;
-const LOOP_W   = (LOGO_W + LOGO_GAP) * 4; // ancho de un ciclo (4 logos reales)
+const LOOP_W = (LOGO_W + LOGO_GAP) * 4; // ancho de un ciclo (4 logos reales)
 
 function SponsorsSlider({ theme }: { theme: any }) {
   const translateX = useRef(new Animated.Value(0)).current;
-  const anim       = useRef<Animated.CompositeAnimation | null>(null);
+  const anim = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     const run = () => {
@@ -389,27 +480,27 @@ function SponsorsSlider({ theme }: { theme: any }) {
 
   return (
     <View style={spS.wrapper}>
-      <Text style={[spS.label, { color: theme.colors.muted }]}>Sponsors oficiales</Text>
+      <Text style={[spS.label, { color: theme.colors.muted }]}>
+        Sponsors oficiales
+      </Text>
       <View style={spS.track}>
-        <Animated.View
-          style={[spS.row, { transform: [{ translateX }] }]}
-        >
+        <Animated.View style={[spS.row, { transform: [{ translateX }] }]}>
           {SPONSORS.map((s) => (
             <View
               key={s.id}
               style={[
                 spS.logoBox,
                 {
-                  backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : '#fff',
-                  borderColor: theme.isDark ? 'rgba(110,198,255,0.12)' : 'rgba(110,198,255,0.18)',
+                  backgroundColor: theme.isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "#fff",
+                  borderColor: theme.isDark
+                    ? "rgba(110,198,255,0.12)"
+                    : "rgba(110,198,255,0.18)",
                 },
               ]}
             >
-              <Image
-                source={s.source}
-                style={spS.logo}
-                resizeMode="contain"
-              />
+              <Image source={s.source} style={spS.logo} resizeMode="contain" />
             </View>
           ))}
         </Animated.View>
@@ -420,11 +511,16 @@ function SponsorsSlider({ theme }: { theme: any }) {
 
 const spS = StyleSheet.create({
   wrapper: { gap: 8 },
-  label: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
-  track: { overflow: 'hidden', height: LOGO_H + 16 },
+  label: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  track: { overflow: "hidden", height: LOGO_H + 16 },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: LOGO_GAP,
     paddingVertical: 8,
   },
@@ -433,8 +529,8 @@ const spS = StyleSheet.create({
     height: LOGO_H,
     borderRadius: 14,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 10,
     shadowColor: CELESTE,
     shadowOffset: { width: 0, height: 1 },
@@ -447,17 +543,17 @@ const spS = StyleSheet.create({
 
 // ── Pantalla principal ────────────────────────────────────────
 export default function AppHomeScreen() {
-  const router    = useRouter();
+  const router = useRouter();
   const { theme } = useAppTheme();
-  const { user }  = useAuth();
+  const { user } = useAuth();
 
   if (!user) return null;
 
-  const greeting  = getGreeting();
-  const firstName = user.nombre?.split(' ')[0] ?? 'Hola';
-  const initials  = (user.nombre ?? 'U').substring(0, 2).toUpperCase();
-  const upcoming  = getUpcomingMatches(3);
-  const bg        = theme.isDark ? '#0D0D0D' : '#F5F7FA';
+  const greeting = getGreeting();
+  const firstName = user.nombre?.split(" ")[0] ?? "Hola";
+  const initials = (user.nombre ?? "U").substring(0, 2).toUpperCase();
+  const upcoming = getUpcomingMatches(3);
+  const bg = theme.isDark ? "#0D0D0D" : "#F5F7FA";
 
   return (
     <Screen style={{ backgroundColor: bg }}>
@@ -465,26 +561,31 @@ export default function AppHomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-
         {/* ── Header ──────────────────────────────────────── */}
         <FadeSlide delay={0}>
           {/* Logo GrupoNúcleo */}
           <View style={[hdr.logoRow, { backgroundColor: bg }]}>
             <Image
-              source={theme.isDark
-                ? require('../../images/icononucleo.png')
-                : require('../../images/icononucleo-light.png')}
+              source={
+                theme.isDark
+                  ? require("../../images/icononucleo.png")
+                  : require("../../images/icononucleo-light.png")
+              }
               style={hdr.logo}
               resizeMode="contain"
             />
           </View>
           <View style={[hdr.wrapper, { backgroundColor: bg }]}>
             <View>
-              <Text style={[hdr.greeting, { color: theme.colors.muted }]}>{greeting} 👋</Text>
-              <Text style={[hdr.name, { color: theme.colors.text }]}>{firstName}</Text>
+              <Text style={[hdr.greeting, { color: theme.colors.muted }]}>
+                {greeting} 👋
+              </Text>
+              <Text style={[hdr.name, { color: theme.colors.text }]}>
+                {firstName}
+              </Text>
             </View>
             <Pressable
-              onPress={() => router.push('/(app)/perfil')}
+              onPress={() => router.push("/(app)/perfil")}
               style={hdr.avatarBtn}
             >
               <LinearGradient
@@ -498,7 +599,6 @@ export default function AppHomeScreen() {
         </FadeSlide>
 
         <View style={{ paddingHorizontal: 16, gap: 24 }}>
-
           {/* ── Banner carrusel ─────────────────────────── */}
           <FadeSlide delay={60}>
             <WCBanner />
@@ -507,8 +607,11 @@ export default function AppHomeScreen() {
           {/* ── Botón pronósticos ────────────────────────── */}
           <FadeSlide delay={120}>
             <Pressable
-              onPress={() => router.push('/(app)/pronosticos')}
-              style={({ pressed }) => [predBtn.wrapper, { opacity: pressed ? 0.88 : 1 }]}
+              onPress={() => router.push("/(app)/pronosticos")}
+              style={({ pressed }) => [
+                predBtn.wrapper,
+                { opacity: pressed ? 0.88 : 1 },
+              ]}
             >
               <LinearGradient
                 colors={[CELESTE_DARK, DEEP_BLUE]}
@@ -524,7 +627,9 @@ export default function AppHomeScreen() {
                   <Text style={predBtn.emoji}>🎯</Text>
                   <View>
                     <Text style={predBtn.title}>Hacer predicción</Text>
-                    <Text style={predBtn.sub}>Predecí los resultados del Mundial</Text>
+                    <Text style={predBtn.sub}>
+                      Predecí los resultados del Mundial
+                    </Text>
                   </View>
                 </View>
                 <View style={predBtn.arrow}>
@@ -542,23 +647,28 @@ export default function AppHomeScreen() {
           {/* ── Próximos partidos ────────────────────────── */}
           <FadeSlide delay={180}>
             <View style={sec.header}>
-              <Text style={[sec.title, { color: theme.colors.text }]}>⚽  Próximos partidos</Text>
-              <Pressable onPress={() => router.push('/(app)/fixture')}>
-                <Text style={[sec.link, { color: CELESTE_DARK }]}>Ver fixture</Text>
+              <Text style={[sec.title, { color: theme.colors.text }]}>
+                ⚽ Próximos partidos
+              </Text>
+              <Pressable onPress={() => router.push("/(app)/fixture")}>
+                <Text style={[sec.link, { color: CELESTE_DARK }]}>
+                  Ver fixture
+                </Text>
               </Pressable>
             </View>
             {upcoming.map((m) => (
               <UpcomingMatchCard
                 key={m.id}
                 match={m}
-                onPress={() => router.push({
-                  pathname: '/(app)/details/detalle-partido',
-                  params: { matchId: m.id },
-                })}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(app)/details/detalle-partido",
+                    params: { matchId: m.id },
+                  })
+                }
               />
             ))}
           </FadeSlide>
-
         </View>
       </ScrollView>
     </Screen>
@@ -568,7 +678,7 @@ export default function AppHomeScreen() {
 // ── Estilos header ─────────────────────────────────────────────
 const hdr = StyleSheet.create({
   logoRow: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: 14,
     paddingBottom: 4,
   },
@@ -577,15 +687,15 @@ const hdr = StyleSheet.create({
     height: 40,
   },
   wrapper: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 6,
     paddingBottom: 12,
   },
-  greeting: { fontSize: 13, fontWeight: '500' },
-  name:     { fontSize: 24, fontWeight: '800', marginTop: 2 },
+  greeting: { fontSize: 13, fontWeight: "500" },
+  name: { fontSize: 24, fontWeight: "800", marginTop: 2 },
   avatarBtn: {
     shadowColor: CELESTE,
     shadowOffset: { width: 0, height: 2 },
@@ -597,17 +707,17 @@ const hdr = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  avatarText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  avatarText: { color: "#fff", fontSize: 16, fontWeight: "800" },
 });
 
 // ── Botón pronósticos ──────────────────────────────────────────
 const predBtn = StyleSheet.create({
   wrapper: {
     borderRadius: 22,
-    overflow: 'hidden',
+    overflow: "hidden",
     shadowColor: DEEP_BLUE,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
@@ -615,61 +725,66 @@ const predBtn = StyleSheet.create({
     elevation: 6,
   },
   gradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 20,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
   },
   circle: {
-    position: 'absolute',
+    position: "absolute",
     width: 140,
     height: 140,
     borderRadius: 70,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: "rgba(255,255,255,0.12)",
     top: -40,
     right: -20,
   },
   circleSmall: {
-    position: 'absolute',
+    position: "absolute",
     width: 70,
     height: 70,
     borderRadius: 35,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: "rgba(255,255,255,0.08)",
     top: 10,
     right: 60,
   },
   left: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     flex: 1,
   },
-  emoji:  { fontSize: 36 },
-  title:  { color: '#fff', fontSize: 18, fontWeight: '800' },
-  sub:    { color: 'rgba(255,255,255,0.68)', fontSize: 12, fontWeight: '500', marginTop: 2 },
+  emoji: { fontSize: 36 },
+  title: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  sub: {
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   arrow: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
 // ── Sección ────────────────────────────────────────────────────
 const sec = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
   },
-  title: { fontSize: 17, fontWeight: '800' },
-  link:  { fontSize: 13, fontWeight: '600' },
+  title: { fontSize: 17, fontWeight: "800" },
+  link: { fontSize: 13, fontWeight: "600" },
 });
