@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, ScrollView, Text, StyleSheet, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
