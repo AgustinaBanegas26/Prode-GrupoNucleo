@@ -12,7 +12,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
 
   const name = user ? user.nombre : 'Usuario';
-  const email = user ? (user.role === 'admin' ? `Admin: ${user.usuario}` : `Cliente: ${user.cliente_id}`) : '';
+  const email = user ? (user.role === 'admin' ? `Admin: ${user.admin_id}` : `Cliente: ${user.cliente_id}`) : '';
 
   return (
     <Screen style={styles.screen}>

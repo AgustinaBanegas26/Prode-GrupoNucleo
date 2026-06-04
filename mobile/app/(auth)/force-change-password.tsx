@@ -1,16 +1,21 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { Image, Text, View } from 'react-native';
-import { useForm } from 'react-hook-form';
-
-import { Button } from '../../src/components/Button';
-import { FormTextField } from '../../src/components/FormTextField';
-import { Screen } from '../../src/components/Screen';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  type ForceChangePasswordFormValues,
-  forceChangePasswordSchema,
-} from '../../src/features/auth/schemas';
+  ActivityIndicator,
+  BackHandler,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+
+import { PasswordStrengthBar } from '../../src/components/PasswordStrengthBar';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 
@@ -18,7 +23,17 @@ export default function ForceChangePasswordScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { user, changePassword } = useAuth();
-  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);  // Bloquear botón atrás en Android
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => sub.remove();
+  }, []);
 
   const logoSource = useMemo(
     () =>
@@ -28,72 +43,204 @@ export default function ForceChangePasswordScreen() {
     [theme.isDark],
   );
 
-  const { control, handleSubmit, formState } = useForm<ForceChangePasswordFormValues>({
-    resolver: zodResolver(forceChangePasswordSchema),
-    defaultValues: { password: '', confirmPassword: '' },
-  });
+  const validate = (): string | null => {
+    if (password.length < 8) return 'Mínimo 8 caracteres';
+    if (!/[A-Z]/.test(password)) return 'Debe incluir al menos una mayúscula';
+    if (!/[a-z]/.test(password)) return 'Debe incluir al menos una minúscula';
+    if (!/\d/.test(password)) return 'Debe incluir al menos un número';
+    if (!/[^A-Za-z0-9]/.test(password)) return 'Debe incluir al menos un símbolo';
+    if (password !== confirm) return 'Las contraseñas no coinciden';
+    return null;
+  };
 
-  const onSubmit = handleSubmit(async (values) => {
-    if (!user) return;
-    setSubmitError(null);
+  const handleSubmit = async () => {
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (!user) {
+      setError('Sesión no encontrada. Volvé a iniciar sesión.');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
 
     try {
-      await changePassword(user, values.password);
-
-      if (user.role === 'admin') {
-        router.replace('/(admin)');
-      } else {
-        router.replace('/(app)');
-      }
+      console.log('[FCP] llamando changePassword para user:', user.id, 'role:', user.role);
+      await changePassword(user, password);
+      console.log('[FCP] changePassword exitoso, redirigiendo...');
+      router.replace(user.role === 'admin' ? '/(admin)' : '/(app)');
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'No se pudo actualizar la contraseña.');
+      console.log('[FCP] error:', e);
+      setError(e instanceof Error ? e.message : 'Error al actualizar la contraseña.');
+    } finally {
+      setLoading(false);
     }
-  });
+  };
 
   return (
-    <Screen>
-      <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 20 }}>
-        <View style={{ alignItems: 'center', gap: 12 }}>
-          <Image source={logoSource} style={{ width: 120, height: 120 }} resizeMode="contain" />
-          <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '800' }}>
-            Cambiá tu contraseña
-          </Text>
-          <Text style={{ color: '#5C5C5C', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-            {user
-              ? `Hola ${user.nombre || user.usuario}. Por seguridad, definí una contraseña nueva antes de continuar.`
-              : 'Definí una contraseña nueva antes de continuar.'}
-          </Text>
-        </View>
-
-        <View style={{ gap: 14 }}>
-          <FormTextField
-            control={control}
-            name="password"
-            label="Contraseña nueva"
-            placeholder="Mín. 8 caracteres, 1 mayúscula y 1 número"
-            secureTextEntry
-          />
-          <FormTextField
-            control={control}
-            name="confirmPassword"
-            label="Confirmar contraseña"
-            placeholder="Repetí la contraseña"
-            secureTextEntry
-          />
-
-          {submitError ? (
-            <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '600' }}>
-              {submitError}
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo + título */}
+          <View style={{ alignItems: 'center', marginBottom: 32 }}>
+            <View
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 24,
+                backgroundColor: theme.colors.surface,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 20,
+              }}
+            >
+              <Image source={logoSource} style={{ width: 64, height: 64 }} resizeMode="contain" />
+            </View>
+            <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 }}>
+              Cambiá tu contraseña
             </Text>
-          ) : null}
+            <Text style={{ color: theme.colors.muted, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+              {user ? `Hola ${user.nombre}. Definí tu contraseña definitiva.` : 'Definí tu contraseña definitiva.'}
+            </Text>
+          </View>
 
-          <Button
-            title="Actualizar contraseña"
-            onPress={onSubmit}
-            loading={formState.isSubmitting}
-          />
-        </View>
-      </View>
-    </Screen>
+          {/* Formulario */}
+          <View
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderRadius: 20,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              gap: 16,
+            }}
+          >
+            {/* Campo contraseña nueva */}
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                Contraseña nueva
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  height: 50,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.background,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Mín. 8, mayús, minús, número, símbolo"
+                  placeholderTextColor={theme.colors.placeholder}
+                  secureTextEntry={!showPass}
+                  autoCapitalize="none"
+                  style={{ flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: 0,
+                    // @ts-ignore
+                    outlineStyle: 'none' }}
+                />
+                <Pressable onPress={() => setShowPass(v => !v)} hitSlop={12}>
+                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Indicador de fortaleza */}
+            <PasswordStrengthBar password={password} />
+
+            {/* Campo confirmar */}
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                Confirmar contraseña
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  height: 50,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.background,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <TextInput
+                  value={confirm}
+                  onChangeText={setConfirm}
+                  placeholder="Repetí la contraseña"
+                  placeholderTextColor={theme.colors.placeholder}
+                  secureTextEntry={!showConfirm}
+                  autoCapitalize="none"
+                  style={{ flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: 0,
+                    // @ts-ignore
+                    outlineStyle: 'none' }}
+                />
+                <Pressable onPress={() => setShowConfirm(v => !v)} hitSlop={12}>
+                  <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Error */}
+            {error ? (
+              <View
+                style={{
+                  backgroundColor: 'rgba(244,67,54,0.1)',
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: 'rgba(244,67,54,0.3)',
+                  padding: 12,
+                }}
+              >
+                <Text style={{ color: theme.colors.error, fontSize: 13, fontWeight: '600' }}>
+                  {error}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Botón */}
+            <Pressable
+              onPress={handleSubmit}
+              disabled={loading}
+              style={{
+                height: 50,
+                borderRadius: 12,
+                backgroundColor: theme.colors.primary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: loading ? 0.7 : 1,
+                marginTop: 4,
+              }}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                  Actualizar contraseña
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

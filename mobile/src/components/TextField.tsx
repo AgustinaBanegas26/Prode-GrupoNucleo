@@ -1,5 +1,6 @@
-import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAppTheme } from '../providers/ThemeProvider';
 
@@ -25,30 +26,77 @@ export function TextField({
   error,
 }: Props) {
   const { theme } = useAppTheme();
+  const [focused, setFocused] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const borderColor = error
+    ? theme.colors.error
+    : focused
+      ? theme.colors.primary
+      : theme.colors.border;
 
   return (
-    <View style={{ gap: 8 }}>
-      <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '600' }}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={theme.colors.placeholder}
-        autoCapitalize={autoCapitalize}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
+    <View style={{ gap: 6 }}>
+      <Text
         style={{
-          height: 48,
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          borderWidth: 1,
-          borderColor: error ? theme.colors.primary : theme.colors.border,
-          backgroundColor: theme.colors.surface,
-          color: theme.colors.text,
+          color: theme.colors.textSecondary,
+          fontSize: 13,
+          fontWeight: '600',
+          letterSpacing: 0.3,
         }}
-      />
-      {error ? <Text style={{ color: theme.colors.primary, fontSize: 12 }}>{error}</Text> : null}
+      >
+        {label}
+      </Text>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          height: 50,
+          borderRadius: 12,
+          borderWidth: focused ? 1.5 : 1,
+          borderColor,
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: 14,
+        }}
+      >
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={theme.colors.placeholder}
+          autoCapitalize={autoCapitalize}
+          keyboardType={keyboardType}
+          secureTextEntry={secureTextEntry && !visible}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            flex: 1,
+            color: theme.colors.text,
+            fontSize: 15,
+            paddingVertical: 0,
+            // @ts-ignore — web only: remove browser default outline
+            outlineStyle: 'none',
+          }}
+        />
+        {secureTextEntry ? (
+          <Pressable
+            onPress={() => setVisible((v) => !v)}
+            hitSlop={12}
+            style={{ marginLeft: 8 }}
+          >
+            <Ionicons
+              name={visible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={focused ? theme.colors.primary : theme.colors.muted}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {error ? (
+        <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 2 }}>{error}</Text>
+      ) : null}
     </View>
   );
 }
-

@@ -5,8 +5,9 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { supabase } from '../lib/supabase';
 
 export interface SessionUser {
-  id: string | number;
+  id: string;
   cliente_id?: string;
+  admin_id?: string;
   usuario?: string;
   nombre: string;
   role: 'client' | 'admin';
@@ -33,18 +34,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SESSION_KEY = 'prode_auth_session_v1';
 
-function requiresPasswordChange(record: {
-  primer_login?: boolean;
-  must_change_password?: boolean;
-}): boolean {
-  return Boolean(record.must_change_password ?? record.primer_login);
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [role, setRole] = useState<'client' | 'admin' | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Restore session on app mount
   useEffect(() => {
     async function restoreSession() {
       try {
@@ -70,97 +65,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (identifier: string, password: string): Promise<LoginResult> => {
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-    if (
-      !supabaseUrl ||
-      supabaseUrl.includes('your-project-id') ||
-      !supabaseKey ||
-      supabaseKey.startsWith('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...')
-    ) {
-      throw new Error(
-        'Supabase no está configurado. Por favor, editá el archivo .env en la carpeta mobile con las credenciales reales de tu base de datos.',
-      );
-    }
-
     const cleanIdentifier = identifier.trim();
-    const isSearchAdmin = !/^\d+$/.test(cleanIdentifier);
 
-    if (isSearchAdmin) {
+    // If identifier contains letters → admin login. Pure numbers → client login.
+    const isAdmin = /[a-zA-Z]/.test(cleanIdentifier);
+
+    if (isAdmin) {
+      // ── ADMIN LOGIN ──────────────────────────────────────────────
       const { data: admin, error } = await supabase
         .from('admins')
         .select('*')
         .eq('usuario', cleanIdentifier)
         .maybeSingle();
 
-      if (error) {
-        throw new Error(`Error de base de datos: ${error.message}`);
-      }
+      if (error) throw new Error(`Error de base de datos: ${error.message}`);
+      if (!admin) throw new Error('Usuario no encontrado');
+      if (!admin.habilitado) throw new Error('Usuario deshabilitado. Contactá al administrador.');
 
-      if (!admin) {
-        throw new Error('Usuario no encontrado');
-      }
+      if (admin.primer_login) {
+        // Initial password for admins: admingn123!
+        if (password !== 'admingn123!') throw new Error('Contraseña incorrecta');
 
-      if (!admin.habilitado) {
-        throw new Error('Usuario deshabilitado');
-      }
-
-      if (requiresPasswordChange(admin)) {
-        if (password === 'AdminProde1670') {
-          const tempUser: SessionUser = {
-            id: admin.id,
-            usuario: admin.usuario,
-            nombre: admin.usuario,
-            role: 'admin',
-            mustChangePassword: true,
-          };
-          await saveSession(tempUser);
-          return { mustChangePassword: true, tempUser, role: 'admin' };
-        }
-        throw new Error('Contraseña incorrecta');
+        const tempUser: SessionUser = {
+          id: String(admin.id),
+          admin_id: String(admin.admin_id ?? admin.id),
+          usuario: admin.usuario,
+          nombre: admin.nombre ?? admin.usuario,
+          role: 'admin',
+          mustChangePassword: true,
+        };
+        await saveSession(tempUser);
+        return { mustChangePassword: true, tempUser, role: 'admin' };
       }
 
       const match = await bcrypt.compare(password, admin.password_hash || '');
-      if (!match) {
-        throw new Error('Contraseña incorrecta');
-      }
+      if (!match) throw new Error('Contraseña incorrecta');
 
       const sessionUser: SessionUser = {
-        id: admin.id,
+        id: String(admin.id),
+        admin_id: String(admin.admin_id ?? admin.id),
         usuario: admin.usuario,
-        nombre: admin.usuario,
+        nombre: admin.nombre ?? admin.usuario,
         role: 'admin',
-        mustChangePassword: false,
       };
 
       await saveSession(sessionUser);
       return { mustChangePassword: false, role: 'admin' };
-    }
 
-    const clienteIdNumeric = Number(cleanIdentifier);
-    const { data: client, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('cliente_id', clienteIdNumeric)
-      .maybeSingle();
+    } else {
+      // ── CLIENT LOGIN ─────────────────────────────────────────────
+      // cliente_id puede ser INTEGER o TEXT en la DB — intentamos con número primero
+      const clienteIdValue = /^\d+$/.test(cleanIdentifier)
+        ? Number(cleanIdentifier)
+        : cleanIdentifier;
+      console.log('[AUTH] buscando cliente_id:', clienteIdValue, typeof clienteIdValue);
+      const { data: client, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('cliente_id', clienteIdValue)
+        .maybeSingle();
 
-    if (error) {
-      throw new Error(`Error de base de datos: ${error.message}`);
-    }
+      console.log('[AUTH] resultado query:', JSON.stringify({ data: client, error }));
 
-    if (!client) {
-      throw new Error('Usuario no encontrado');
-    }
+      if (error) throw new Error(`Error de base de datos: ${error.message}`);
+      if (!client) throw new Error('Usuario no encontrado');
+      if (!client.habilitado) throw new Error('Usuario deshabilitado. Contactá al administrador.');
 
-    if (!client.habilitado) {
-      throw new Error('Usuario deshabilitado');
-    }
+      console.log('[AUTH] primer_login:', client.primer_login, '| password ingresada:', password);
 
-    if (requiresPasswordChange(client)) {
-      if (password === cleanIdentifier) {
+      if (client.primer_login) {
+        // Initial password for clients: clientesgn123
+        if (password !== 'clientesgn123') throw new Error('Contraseña incorrecta');
+
         const tempUser: SessionUser = {
-          id: client.id,
-          cliente_id: client.cliente_id,
+          id: String(client.id),
+          cliente_id: String(client.cliente_id),
           nombre: client.nombre,
           role: 'client',
           mustChangePassword: true,
@@ -168,29 +147,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveSession(tempUser);
         return { mustChangePassword: true, tempUser, role: 'client' };
       }
-      throw new Error('Contraseña incorrecta');
+
+      const match = await bcrypt.compare(password, client.password_hash || '');
+      if (!match) throw new Error('Contraseña incorrecta');
+
+      // Update last access
+      await supabase
+        .from('clientes')
+        .update({ ultimo_acceso: new Date().toISOString() })
+        .eq('cliente_id', cleanIdentifier);
+
+      const sessionUser: SessionUser = {
+        id: String(client.id),
+        cliente_id: String(client.cliente_id),
+        nombre: client.nombre,
+        role: 'client',
+      };
+
+      await saveSession(sessionUser);
+      return { mustChangePassword: false, role: 'client' };
     }
-
-    const match = await bcrypt.compare(password, client.password_hash || '');
-    if (!match) {
-      throw new Error('Contraseña incorrecta');
-    }
-
-    await supabase
-      .from('clientes')
-      .update({ ultimo_acceso: new Date().toISOString() })
-      .eq('id', client.id);
-
-    const sessionUser: SessionUser = {
-      id: client.id,
-      cliente_id: client.cliente_id,
-      nombre: client.nombre,
-      role: 'client',
-      mustChangePassword: false,
-    };
-
-    await saveSession(sessionUser);
-    return { mustChangePassword: false, role: 'client' };
   };
 
   const logout = async () => {
@@ -198,68 +174,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.removeItem(SESSION_KEY);
       setUser(null);
       setRole(null);
-      await supabase.auth.signOut();
     } catch (e) {
       console.error('Error on logout:', e);
     }
   };
 
   const changePassword = async (tempUser: SessionUser, newPassword: string) => {
-    if (newPassword.length < 8) {
-      throw new Error('La contraseña debe tener al menos 8 caracteres');
-    }
-    if (!/[A-ZÁÉÍÓÚÑ]/.test(newPassword)) {
-      throw new Error('La contraseña debe incluir al menos una mayúscula');
-    }
-    if (!/[0-9]/.test(newPassword)) {
-      throw new Error('La contraseña debe incluir al menos un número');
-    }
+    console.log('[CHANGE_PW] iniciando para user:', JSON.stringify(tempUser));
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
+    console.log('[CHANGE_PW] hash generado');
 
     if (tempUser.role === 'admin') {
+      console.log('[CHANGE_PW] actualizando admins, id:', tempUser.id);
       const { data, error } = await supabase
         .from('admins')
-        .update({
-          password_hash: hash,
-          primer_login: false,
-          must_change_password: false,
-        })
+        .update({ password_hash: hash, primer_login: false })
         .eq('id', tempUser.id)
         .select();
 
-      if (error) {
-        throw new Error(`Error de base de datos al cambiar contraseña: ${error.message}`);
-      }
-      if (!data || data.length === 0) {
-        throw new Error('Error al actualizar la contraseña del administrador en la base de datos');
-      }
+      console.log('[CHANGE_PW] resultado admins:', JSON.stringify({ data, error }));
+      if (error) throw new Error(`Error al cambiar contraseña: ${error.message}`);
     } else {
+      console.log('[CHANGE_PW] actualizando clientes, id:', tempUser.id, 'cliente_id:', tempUser.cliente_id);
+      // Intentar con id primero, si no matchea usar cliente_id
       const { data, error } = await supabase
         .from('clientes')
         .update({
           password_hash: hash,
           primer_login: false,
-          must_change_password: false,
           ultimo_acceso: new Date().toISOString(),
         })
         .eq('id', tempUser.id)
         .select();
 
-      if (error) {
-        throw new Error(`Error de base de datos al cambiar contraseña: ${error.message}`);
-      }
+      console.log('[CHANGE_PW] resultado clientes:', JSON.stringify({ data, error }));
+      if (error) throw new Error(`Error al cambiar contraseña: ${error.message}`);
+
+      // Si no actualizó ninguna fila, intentar con cliente_id
       if (!data || data.length === 0) {
-        throw new Error('Error al actualizar la contraseña del cliente en la base de datos');
+        console.log('[CHANGE_PW] sin filas con id, reintentando con cliente_id:', tempUser.cliente_id);
+        const { data: data2, error: error2 } = await supabase
+          .from('clientes')
+          .update({
+            password_hash: hash,
+            primer_login: false,
+            ultimo_acceso: new Date().toISOString(),
+          })
+          .eq('cliente_id', tempUser.cliente_id)
+          .select();
+
+        console.log('[CHANGE_PW] resultado clientes (cliente_id):', JSON.stringify({ data: data2, error: error2 }));
+        if (error2) throw new Error(`Error al cambiar contraseña: ${error2.message}`);
       }
     }
 
-    const sessionUser: SessionUser = {
-      ...tempUser,
-      mustChangePassword: false,
-    };
-    await saveSession(sessionUser);
+    const updatedUser = { ...tempUser, mustChangePassword: false };
+    await saveSession(updatedUser);
+    console.log('[CHANGE_PW] sesión actualizada, mustChangePassword=false');
   };
 
   const value = useMemo(
