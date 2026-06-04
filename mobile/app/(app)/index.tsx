@@ -16,7 +16,7 @@ import {
   homePosition,
   getUpcomingMatches,
 } from '../../src/features/mockData';
-import { useSliderStore } from '../../src/features/content/store/sliderStore';
+import { useSliderRealtime, useSliderSlides } from '../../src/features/content/api/sliderSlides';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { useAuth } from '../../src/providers/AuthProvider';
 
@@ -24,14 +24,15 @@ export default function AppHomeScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { user, logout } = useAuth();
-  const slides = useSliderStore((s) => s.slides);
+  const { data: slides = [] } = useSliderSlides();
+  useSliderRealtime();
 
   if (!user) {
     return null;
   }
 
   const carouselItems: CarouselItem[] = slides
-    .filter((s) => s.status === 'active')
+    .filter((s) => s.active)
     .sort((a, b) => a.order - b.order)
     .map((s) => ({
       id: s.id,

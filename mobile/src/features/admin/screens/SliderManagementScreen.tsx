@@ -1,39 +1,70 @@
 import React, { useMemo, useState } from 'react';
 import { View, ScrollView, Text, StyleSheet, Pressable, FlatList, Alert, Modal, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import { Button } from '../../../components/Button';
 import { TextField } from '../../../components/TextField';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { spacing, radius, shadows, typography } from '../../../theme/theme';
-import { makeEmptySlide, type Slide, useSliderStore } from '../../content/store/sliderStore';
+import {
+  type SliderSlide,
+  useDeleteSliderSlide,
+  useReorderSliderSlides,
+  useSliderRealtime,
+  useSliderSlides,
+  useUpsertSliderSlide,
+} from '../../content/api/sliderSlides';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 
 export function SliderManagementScreen() {
   const { theme } = useAppTheme();
-  const slides = useSliderStore((s) => s.slides);
-  const upsert = useSliderStore((s) => s.upsert);
-  const remove = useSliderStore((s) => s.remove);
-  const toggleStatus = useSliderStore((s) => s.toggleStatus);
-  const reorder = useSliderStore((s) => s.reorder);
+  const { data: slides = [] } = useSliderSlides();
+  useSliderRealtime();
+  const upsertMutation = useUpsertSliderSlide();
+  const deleteMutation = useDeleteSliderSlide();
+  const reorderMutation = useReorderSliderSlides();
   const log = useAdminActivityStore((s) => s.log);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(makeEmptySlide());
+  const [form, setForm] = useState<{
+    id?: string;
+    title: string;
+    description: string;
+    imageUri?: string; // local (preview)
+    imagePath?: string; // remoto (storage)
+    imageUrl?: string; // remoto (preview)
+    button: { enabled: boolean; text: string; internalLink?: string; externalLink?: string };
+    order: number;
+    active: boolean;
+  }>({
+    title: '',
+    description: '',
+    button: { enabled: false, text: '', internalLink: '', externalLink: '' },
+    order: 1,
+    active: true,
+  });
 
   const sorted = useMemo(() => [...slides].sort((a, b) => a.order - b.order), [slides]);
 
   const openCreate = () => {
-    setForm(makeEmptySlide());
+    setForm({
+      title: '',
+      description: '',
+      button: { enabled: false, text: '', internalLink: '', externalLink: '' },
+      order: sorted.length + 1,
+      active: true,
+    });
     setModalVisible(true);
   };
 
-  const openEdit = (s: Slide) => {
+  const openEdit = (s: SliderSlide) => {
     setForm({
       id: s.id,
       title: s.title,
       description: s.description,
+      imagePath: s.imagePath,
       imageUrl: s.imageUrl,
       button: {
         enabled: s.button.enabled,
@@ -42,14 +73,37 @@ export function SliderManagementScreen() {
         externalLink: s.button.externalLink ?? '',
       },
       order: s.order,
-      status: s.status,
+      active: s.active,
     });
     setModalVisible(true);
   };
 
-  const handleSave = () => {
-    if (!form.title.trim() || !form.imageUrl.trim()) {
-      Alert.alert('Error', 'Completá Título e Imagen (URL).');
+  const pickImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a la galería para seleccionar imágenes.');
+      return;
+    }
+
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.92,
+    });
+    if (res.canceled) return;
+    const uri = res.assets?.[0]?.uri;
+    if (!uri) return;
+    setForm((s) => ({ ...s, imageUri: uri }));
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) {
+      Alert.alert('Error', 'Completá el título.');
+      return;
+    }
+
+    if (!form.imageUri && !form.imagePath) {
+      Alert.alert('Error', 'Seleccioná una imagen.');
       return;
     }
 
@@ -58,23 +112,27 @@ export function SliderManagementScreen() {
       return;
     }
 
-    const existed = slides.some((s) => s.id === form.id);
+    const existed = !!form.id;
     setSaving(true);
     try {
       const internal = form.button.internalLink?.trim() || undefined;
       const external = form.button.externalLink?.trim() || undefined;
-      upsert({
-        ...form,
+      await upsertMutation.mutateAsync({
+        id: form.id,
         title: form.title.trim(),
         description: form.description.trim(),
-        imageUrl: form.imageUrl.trim(),
+        active: form.active,
+        order: form.order,
         button: {
           enabled: form.button.enabled,
           text: form.button.text.trim(),
           internalLink: internal,
           externalLink: external,
         },
+        imageUri: form.imageUri,
+        imagePath: form.imagePath,
       });
+
       log({
         action: existed ? 'update' : 'create',
         module: 'slider',
@@ -82,20 +140,26 @@ export function SliderManagementScreen() {
         detail: form.title.trim(),
       });
       setModalVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar el slide.');
     } finally {
       setSaving(false);
     }
   };
 
-  const confirmDelete = (s: Slide) => {
+  const confirmDelete = (s: SliderSlide) => {
     Alert.alert('Eliminar slide', s.title, [
       { text: 'Cancelar' },
       {
         text: 'Eliminar',
         style: 'destructive',
-        onPress: () => {
-          remove(s.id);
-          log({ action: 'delete', module: 'slider', title: 'Slide eliminado', detail: s.title });
+        onPress: async () => {
+          try {
+            await deleteMutation.mutateAsync({ id: s.id, imagePath: s.imagePath });
+            log({ action: 'delete', module: 'slider', title: 'Slide eliminado', detail: s.title });
+          } catch (e) {
+            Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo eliminar el slide.');
+          }
         },
       },
     ]);
@@ -110,17 +174,17 @@ export function SliderManagementScreen() {
     const next = [...ids];
     const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
     [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-    reorder(next);
+    reorderMutation.mutate(next);
     log({ action: 'update', module: 'slider', title: 'Orden del slider actualizado' });
   };
 
-  const renderItem = ({ item }: { item: Slide }) => (
+  const renderItem = ({ item }: { item: SliderSlide }) => (
     <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
       <View style={styles.preview}>
         <View style={[styles.previewImage, { backgroundColor: theme.colors.surfaceAlt }]}>
           <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} />
         </View>
-        {item.status !== 'active' && <View style={[styles.previewMask, { backgroundColor: theme.colors.overlay }]} />}
+        {!item.active && <View style={[styles.previewMask, { backgroundColor: theme.colors.overlay }]} />}
       </View>
 
       <View style={styles.body}>
@@ -144,20 +208,28 @@ export function SliderManagementScreen() {
             </Pressable>
             <Pressable
               onPress={() => {
-                toggleStatus(item.id);
+                upsertMutation.mutate({
+                  id: item.id,
+                  title: item.title,
+                  description: item.description,
+                  active: !item.active,
+                  order: item.order,
+                  button: item.button,
+                  imagePath: item.imagePath,
+                });
                 log({
                   action: 'toggle',
                   module: 'slider',
                   title: 'Estado de slide',
-                  detail: `${item.title} · ${item.status === 'active' ? 'Activo → Inactivo' : 'Inactivo → Activo'}`,
+                  detail: `${item.title} · ${item.active ? 'Activo → Inactivo' : 'Inactivo → Activo'}`,
                 });
               }}
               style={[
                 styles.iconBtn,
-                { backgroundColor: item.status === 'active' ? theme.colors.success : theme.colors.warning },
+                { backgroundColor: item.active ? theme.colors.success : theme.colors.warning },
               ]}
             >
-              <MaterialCommunityIcons name={item.status === 'active' ? 'eye' : 'eye-off'} size={16} color="#fff" />
+              <MaterialCommunityIcons name={item.active ? 'eye' : 'eye-off'} size={16} color="#fff" />
             </Pressable>
           </View>
         </View>
@@ -217,26 +289,39 @@ export function SliderManagementScreen() {
                   value={form.description}
                   onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
                 />
-                <TextField
-                  label="Imagen (URL)"
-                  value={form.imageUrl}
-                  onChangeText={(v) => setForm((s) => ({ ...s, imageUrl: v }))}
-                  autoCapitalize="none"
-                />
+
+                <View style={styles.imagePickerBox}>
+                  <Text style={[styles.imagePickerLabel, { color: theme.colors.textSecondary }]}>Imagen</Text>
+                  <Pressable onPress={pickImage} style={[styles.imagePickBtn, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
+                    <MaterialCommunityIcons name="image-plus" size={18} color={theme.colors.primary} />
+                    <Text style={[styles.imagePickBtnText, { color: theme.colors.text }]}>
+                      {form.imageUri || form.imageUrl ? 'Cambiar imagen' : 'Seleccionar imagen'}
+                    </Text>
+                  </Pressable>
+
+                  {(form.imageUri || form.imageUrl) ? (
+                    <View style={[styles.imagePreview, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
+                      <Image
+                        source={{ uri: form.imageUri ?? form.imageUrl }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    </View>
+                  ) : null}
+                </View>
 
                 <View style={styles.selectRow}>
                   <Pressable
-                    onPress={() => setForm((s) => ({ ...s, status: s.status === 'active' ? 'inactive' : 'active' }))}
+                    onPress={() => setForm((s) => ({ ...s, active: !s.active }))}
                     style={[
                       styles.selectPill,
                       {
-                        backgroundColor: form.status === 'active' ? theme.colors.success : theme.colors.warning,
+                        backgroundColor: form.active ? theme.colors.success : theme.colors.warning,
                         borderColor: theme.colors.border,
                       },
                     ]}
                   >
                     <Text style={[styles.selectPillText, { color: '#fff' }]}>
-                      {form.status === 'active' ? 'Activo' : 'Inactivo'}
+                      {form.active ? 'Activo' : 'Inactivo'}
                     </Text>
                   </Pressable>
 
@@ -454,5 +539,31 @@ const styles = StyleSheet.create({
   },
   buttonSection: {
     gap: spacing.md,
+  },
+  imagePickerBox: {
+    gap: spacing.sm,
+  },
+  imagePickerLabel: {
+    fontSize: 12,
+    fontWeight: typography.regular as any,
+  },
+  imagePickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  imagePickBtnText: {
+    fontSize: 13,
+    fontWeight: typography.semibold as any,
+  },
+  imagePreview: {
+    height: 140,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
   },
 });
