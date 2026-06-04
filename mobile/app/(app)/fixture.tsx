@@ -1,85 +1,194 @@
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, MatchCard } from '../../src/components';
+import { AppHeader, SportMatchCard } from '../../src/components';
 import { Screen } from '../../src/components/Screen';
-import { fixtures, fixturePhases, type MatchItem, getMatchesByPhase } from '../../src/features/mockData';
-
-const phaseLabels = fixturePhases;
+import {
+  fixtureGroups,
+  fixturePhases,
+  getMatchesByGroup,
+  getMatchesByPhase,
+  type MatchItem,
+  type MatchPhase,
+} from '../../src/features/mockData';
+import { useAppTheme } from '../../src/providers/ThemeProvider';
 
 export default function FixtureScreen() {
   const router = useRouter();
-  const [selectedPhase, setSelectedPhase] = useState<MatchItem['phase']>('Fase de Grupos');
-  const matches = useMemo(() => getMatchesByPhase(selectedPhase), [selectedPhase]);
+  const { theme } = useAppTheme();
+  const [selectedPhase, setSelectedPhase] = useState<MatchPhase>('Fase de Grupos');
+  const [selectedGroup, setSelectedGroup] = useState<string>('Grupo A');
+
+  const isGroupPhase = selectedPhase === 'Fase de Grupos';
+
+  const matches = useMemo<MatchItem[]>(() => {
+    if (isGroupPhase) return getMatchesByGroup(selectedGroup);
+    return getMatchesByPhase(selectedPhase);
+  }, [selectedPhase, selectedGroup, isGroupPhase]);
 
   return (
     <Screen style={styles.screen}>
       <AppHeader />
-      <View style={styles.container}>
-        <Text style={styles.pageTitle}>Fixture</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.phasesScroll} contentContainerStyle={styles.phasesContent}>
-          {phaseLabels.map((phase) => {
-            const selected = phase === selectedPhase;
-            return (
-              <Text
-                key={phase}
-                onPress={() => setSelectedPhase(phase)}
-                style={[styles.phaseTab, selected && styles.phaseTabActive]}
-              >
-                {phase}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        stickyHeaderIndices={[0]}
+      >
+        {/* Header sticky con tabs de fase */}
+        <View style={[styles.stickyHeader, { backgroundColor: theme.colors.background }]}>
+          <Text style={[styles.pageTitle, { color: theme.colors.text }]}>⚽ Fixture 2026</Text>
+
+          {/* Tabs de fase */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.phasesContent}
+          >
+            {fixturePhases.map((phase) => {
+              const active = phase === selectedPhase;
+              return (
+                <Pressable
+                  key={phase}
+                  onPress={() => setSelectedPhase(phase)}
+                  style={[
+                    styles.phaseTab,
+                    {
+                      backgroundColor: active ? theme.colors.primary : theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.phaseTabText, { color: active ? '#fff' : theme.colors.muted }]}>
+                    {phase}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* Sub-tabs de grupo (solo en Fase de Grupos) */}
+          {isGroupPhase && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.groupsContent}
+            >
+              {fixtureGroups.map((group) => {
+                const active = group === selectedGroup;
+                return (
+                  <Pressable
+                    key={group}
+                    onPress={() => setSelectedGroup(group)}
+                    style={[
+                      styles.groupTab,
+                      {
+                        backgroundColor: active
+                          ? theme.isDark ? 'rgba(204,38,39,0.18)' : 'rgba(204,38,39,0.10)'
+                          : 'transparent',
+                        borderColor: active ? theme.colors.primary : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.groupTabText,
+                        { color: active ? theme.colors.primary : theme.colors.textSecondary },
+                      ]}
+                    >
+                      {group.replace('Grupo ', '')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Lista de partidos */}
+        <View style={styles.matchList}>
+          {matches.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={{ fontSize: 40 }}>🏆</Text>
+              <Text style={[styles.emptyText, { color: theme.colors.muted }]}>
+                Los partidos de esta fase se definirán durante el torneo
               </Text>
-            );
-          })}
-        </ScrollView>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
-          {matches.map((item) => (
-            <MatchCard
-              key={item.id}
-              {...item}
-              onPress={() => router.push({ pathname: '/(app)/details/detalle-partido', params: { matchId: item.id } })}
-            />
-          ))}
-        </ScrollView>
-      </View>
+            </View>
+          ) : (
+            matches.map((item) => (
+              <SportMatchCard
+                key={item.id}
+                {...item}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/details/detalle-partido',
+                    params: { matchId: item.id },
+                  })
+                }
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    paddingBottom: 20,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 18,
+  screen: { paddingBottom: 0 },
+  scrollContent: { paddingBottom: 110 },
+  stickyHeader: {
     paddingTop: 6,
+    paddingBottom: 10,
+    paddingHorizontal: 18,
+    gap: 10,
   },
   pageTitle: {
     fontSize: 24,
     fontWeight: '800',
-    marginBottom: 18,
-  },
-  phasesScroll: {
-    marginBottom: 18,
+    marginBottom: 4,
   },
   phasesContent: {
-    paddingVertical: 4,
+    gap: 8,
+    paddingVertical: 2,
   },
   phaseTab: {
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: '#11182710',
-    color: '#5C5C5C',
+    borderRadius: 20,
+    marginRight: 6,
+  },
+  phaseTabText: {
+    fontSize: 13,
     fontWeight: '700',
-    marginRight: 10,
   },
-  phaseTabActive: {
-    backgroundColor: '#CC2627',
-    color: '#fff',
+  groupsContent: {
+    gap: 6,
+    paddingVertical: 2,
   },
-  listContent: {
-    paddingBottom: 40,
+  groupTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  groupTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  matchList: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 30,
   },
 });

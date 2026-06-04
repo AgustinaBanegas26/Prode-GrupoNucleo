@@ -1,10 +1,10 @@
 import { Stack, useRouter } from 'expo-router';
-import { FlatList, ScrollView, StyleSheet, Text, View, Pressable, Linking } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Pressable, Linking } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import {
   AppHeader,
-  MatchCard,
+  SportMatchCard,
   ImageCarousel,
   DashboardSection,
   Container,
@@ -14,7 +14,7 @@ import { Screen } from '../../src/components/Screen';
 import type { CarouselItem } from '../../src/components/ImageCarousel';
 import {
   homePosition,
-  upcomingMatches,
+  getUpcomingMatches,
 } from '../../src/features/mockData';
 import { useSliderStore } from '../../src/features/content/store/sliderStore';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
@@ -58,7 +58,7 @@ export default function AppHomeScreen() {
         <Container>
           <View style={{ marginBottom: 20, gap: 8 }}>
             <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '700' }}>
-              Bienvenido, {user.nombre}
+              👋 Hola, {user.nombre}
             </Text>
             <View style={{ gap: 4 }}>
               <Text style={{ color: theme.colors.textSecondary }}>
@@ -78,7 +78,7 @@ export default function AppHomeScreen() {
 
           {/* Mi Posición */}
           <DashboardSection
-            title="Mi posición"
+            title="🏆 Mi posición"
             icon="trophy"
             action={{
               label: 'Ver ranking',
@@ -115,27 +115,22 @@ export default function AppHomeScreen() {
 
           {/* Próximos Partidos */}
           <DashboardSection
-            title="Próximos partidos"
+            title="⚽ Próximos partidos"
             icon="calendar"
             action={{
               label: 'Ver fixture',
               onPress: () => router.push('/(app)/fixture'),
             }}
           >
-            <FlatList
-              data={upcomingMatches.slice(0, 2)}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <MatchCard
-                  {...item}
-                  onPress={() =>
-                    router.push({ pathname: '/(app)/details/detalle-partido', params: { matchId: item.id } })
-                  }
-                />
-              )}
-              scrollEnabled={false}
-              contentContainerStyle={styles.matchList}
-            />
+            {getUpcomingMatches(3).map((item) => (
+              <SportMatchCard
+                key={item.id}
+                {...item}
+                onPress={() =>
+                  router.push({ pathname: '/(app)/details/detalle-partido', params: { matchId: item.id } })
+                }
+              />
+            ))}
           </DashboardSection>
 
           {/* Quick Actions */}
