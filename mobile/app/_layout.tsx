@@ -17,7 +17,9 @@ const PUBLIC_AUTH_ROUTES = new Set([
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const segments = useSegments();
+  // expo-router tipa useSegments() como tuplas en algunos contextos.
+  // En nuestro caso necesitamos acceder a índices variables sin errores TS.
+  const segments = useSegments() as string[];
 
   const { user, loading } = useAuth();
 

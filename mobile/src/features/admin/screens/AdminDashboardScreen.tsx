@@ -125,7 +125,7 @@ const MENU_OPTIONS: MenuOption[] = [
 export function AdminDashboardScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
-  const signOut = useAuthStore((s) => s.signOut);
+  const { logout } = useAuth();
   const log = useAdminActivityStore((s) => s.log);
 
   const users = useUsersStore((s) => s.users);
@@ -199,9 +199,9 @@ export function AdminDashboardScreen() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     log({ action: 'logout', module: 'auth', title: 'Cierre de sesión admin' });
-    signOut();
+    await logout();
     router.replace('/(auth)/login');
   };
 
@@ -375,6 +375,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderBottomWidth: 1,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  adminAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: typography.bold as any,
@@ -404,6 +416,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     ...shadows.sm,
+  },
+  statIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statValue: {
     fontSize: 18,

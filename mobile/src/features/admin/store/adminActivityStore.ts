@@ -6,6 +6,8 @@ export type AdminActivityAction = 'create' | 'update' | 'delete' | 'toggle' | 'l
 export type AdminActivityModule =
   | 'auth'
   | 'users'
+  | 'matches'
+  | 'notifications'
   | 'images'
   | 'slider'
   | 'news'

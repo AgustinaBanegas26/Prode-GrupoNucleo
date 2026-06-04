@@ -32,11 +32,35 @@ EXPO_PUBLIC_PASSWORD_RESET_REDIRECT_URL=https://TU_DOMINIO/reset-password
 
 `resetPasswordForEmail` requiere que el email exista en **auth.users**.
 
+Además, por seguridad, **Supabase puede devolver “OK” aunque el usuario no exista** (para evitar enumeración). En ese caso la app “parece” procesar, pero **no llega ningún correo**.
+
 Para cada admin/cliente con recuperación por email:
 
 1. Crear usuario en Authentication con el mismo email registrado en `admins.email` o `clientes.email`
 2. Ejecutar la migración `mobile/supabase/migrations/002_password_recovery.sql`
 3. Mantener sincronizado el hash legacy: al restablecer desde la app, `passwordRecoveryService` actualiza `password_hash` en `admins`/`clientes`
+
+### Opción recomendada (automática): Edge Function `ensure-auth-user`
+
+Este repo incluye una Edge Function en:
+
+```text
+supabase/functions/ensure-auth-user/index.ts
+```
+
+Qué hace:
+- recibe `{ email }`
+- verifica si existe en `admins` o `clientes`
+- si existe, crea el usuario en `auth.users` (si no existe) usando `service_role`
+- **no revela** si el email existe o no (respuesta siempre “ok”)
+
+Requisitos de despliegue:
+- Configurar secretos/variables del function:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- Deploy de la function con Supabase CLI (o desde el dashboard, según tu setup).
+
+Luego, la app (forgot-password) primero invoca esta function y después llama `resetPasswordForEmail()`.
 
 ## Flujo en la app
 

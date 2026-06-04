@@ -214,11 +214,11 @@ export const glass = {
  * Gradientes para hero y fondos premium
  */
 export const gradients = {
-  heroOverlay: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.75)'] as string[],
-  primaryFade: ['#CC2627', 'rgba(204,38,39,0)'] as string[],
-  rankBadge: ['#CC2627', '#8B0000'] as string[],
-  darkHero: ['rgba(13,13,13,0)', 'rgba(13,13,13,0.92)'] as string[],
-  heroFallback: ['#1a0000', '#CC2627'] as string[],
+  heroOverlay: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.75)'] as const,
+  primaryFade: ['#CC2627', 'rgba(204,38,39,0)'] as const,
+  rankBadge: ['#CC2627', '#8B0000'] as const,
+  darkHero: ['rgba(13,13,13,0)', 'rgba(13,13,13,0.92)'] as const,
+  heroFallback: ['#1a0000', '#CC2627'] as const,
 } as const;
 
 /**
