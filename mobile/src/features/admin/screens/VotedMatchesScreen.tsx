@@ -1,10 +1,13 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,205 +15,322 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { fixtures, fixturePhases, makeMatchLabel, type MatchPhase } from '../../mockData';
+import { supabase } from '../../../lib/supabase';
+import { getFlagEmoji } from '../../../theme/theme';
 
-const DORADO = '#F59E0B';
-const ROJO   = '#ef4444';
+const CELESTE_DARK = '#3DA5F5';
+const DEEP_BLUE   = '#0F4C81';
 
-type VoteRow = { id: string; label: string; phase: MatchPhase; votes: number };
+type PredRow = {
+  id: string;
+  cliente_id: string;
+  fixture_id: number;
+  pick_winner: string;
+  score_home: number | null;
+  score_away: number | null;
+  points_earned: number;
+  status: string;
+  submitted_at: string;
+  nombre?: string;
+};
 
-function hashVotes(input: string) {
-  let n = 0;
-  for (let i = 0; i < input.length; i += 1) n = (n * 31 + input.charCodeAt(i)) % 1000;
-  return 50 + (n % 450);
-}
+type MatchGroup = {
+  fixture_id: number;
+  home_team: string;
+  away_team: string;
+  match_date: string;
+  home_logo: string | null;
+  away_logo: string | null;
+  preds: PredRow[];
+  expanded: boolean;
+};
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
   const opacity    = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 380, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 380, delay, useNativeDriver: true }),
+      Animated.timing(opacity,    { toValue: 1, duration: 320, delay, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 320, delay, useNativeDriver: true }),
     ]).start();
   }, []);
   return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
 }
 
-function AnimatedBar({ pct, accent, isDark }: { pct: number; accent: string; isDark: boolean }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(anim, { toValue: pct, duration: 700, useNativeDriver: false }).start();
-  }, [pct]);
-  return (
-    <View style={[b.track, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }]}>
-      <Animated.View style={[{ width: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }]}>
-        <LinearGradient colors={[accent, accent + '66']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={b.fill} />
-      </Animated.View>
-    </View>
-  );
-}
-const b = StyleSheet.create({
-  track: { height: 8, borderRadius: 99, overflow: 'hidden' },
-  fill:  { height: 8, borderRadius: 99 },
-});
-
-function rankColor(pos: number) {
-  if (pos === 1) return DORADO;
-  if (pos === 2) return '#94A3B8';
-  if (pos === 3) return '#CD7F32';
-  return 'rgba(128,128,128,0.4)';
+function TeamImg({ logo, code, size = 32 }: { logo?: string | null; code: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  if (logo && !failed) {
+    return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" onError={() => setFailed(true)} />;
+  }
+  return <Text style={{ fontSize: size * 0.75 }}>{getFlagEmoji(code)}</Text>;
 }
 
 export function VotedMatchesScreen() {
-  const { theme } = useAppTheme();
-  const isDark = theme.isDark;
-  const router = useRouter();
-  const [phase, setPhase] = useState<MatchPhase | 'all'>('all');
+  const { theme }  = useAppTheme();
+  const isDark     = theme.isDark;
+  const router     = useRouter();
 
-  const rows = useMemo<VoteRow[]>(() => {
-    return fixtures
-      .filter((m) => (phase === 'all' ? true : m.phase === phase))
-      .map<VoteRow>((m) => ({
-        id:    m.id,
-        label: makeMatchLabel(m),
-        phase: m.phase,
-        votes: hashVotes(`${m.id}_${m.homeTeam}_${m.awayTeam}`),
-      }))
-      .sort((a, b) => b.votes - a.votes)
-      .slice(0, 20);
-  }, [phase]);
+  const [groups,   setGroups]   = useState<MatchGroup[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [query,    setQuery]    = useState('');
+  const [filter,   setFilter]   = useState<'all' | 'pending' | 'evaluated'>('all');
 
-  const maxVotes = Math.max(...rows.map((r) => r.votes), 1);
+  const fetchData = async () => {
+    setLoading(true);
 
-  const bg          = isDark ? '#0a0f0a' : '#fff1f2';
-  const hFrom       = isDark ? '#7f1d1d' : '#b91c1c';
-  const hTo         = isDark ? '#0a0f0a' : '#fff1f2';
-  const textPrimary = isDark ? '#fff' : '#111';
-  const textSub     = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
-  const cardBg      = isDark ? 'rgba(255,255,255,0.04)' : '#fff';
-  const cardBorder  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-  const rojoLight   = isDark ? ROJO : '#dc2626';
+    // Leer predicciones
+    const { data: preds } = await supabase
+      .from('predictions')
+      .select('*')
+      .order('submitted_at', { ascending: false });
+
+    if (!preds || preds.length === 0) { setGroups([]); setLoading(false); return; }
+
+    // Enriquecer con nombres de clientes
+    const clienteIds = [...new Set(preds.map(p => p.cliente_id).filter(Boolean))];
+    let nombreMap: Record<string, string> = {};
+    if (clienteIds.length > 0) {
+      const { data: clientes } = await supabase
+        .from('clientes')
+        .select('cliente_id, nombre')
+        .in('cliente_id', clienteIds);
+      for (const c of clientes ?? []) nombreMap[c.cliente_id] = c.nombre;
+    }
+
+    // Leer matches correspondientes
+    const fixtureIds = [...new Set(preds.map(p => p.fixture_id))];
+    const { data: matches } = await supabase
+      .from('matches')
+      .select('fixture_id, home_team, away_team, match_date, home_logo, away_logo')
+      .in('fixture_id', fixtureIds);
+
+    const matchMap: Record<number, any> = {};
+    for (const m of matches ?? []) matchMap[m.fixture_id] = m;
+
+    // Agrupar por fixture_id
+    const groupMap: Record<number, MatchGroup> = {};
+    for (const p of preds) {
+      const m = matchMap[p.fixture_id];
+      if (!groupMap[p.fixture_id]) {
+        groupMap[p.fixture_id] = {
+          fixture_id: p.fixture_id,
+          home_team:  m?.home_team ?? `Partido #${p.fixture_id}`,
+          away_team:  m?.away_team ?? '',
+          match_date: m?.match_date ?? '',
+          home_logo:  m?.home_logo ?? null,
+          away_logo:  m?.away_logo ?? null,
+          preds:      [],
+          expanded:   false,
+        };
+      }
+      groupMap[p.fixture_id].preds.push({ ...p, nombre: nombreMap[p.cliente_id] ?? p.cliente_id });
+    }
+
+    setGroups(Object.values(groupMap).sort((a, b) => a.match_date.localeCompare(b.match_date)));
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // Realtime
+  useEffect(() => {
+    const ch = supabase.channel('predictions-admin-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions' }, fetchData)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  const toggleExpand = (fixtureId: number) => {
+    setGroups(prev => prev.map(g => g.fixture_id === fixtureId ? { ...g, expanded: !g.expanded } : g));
+  };
+
+  const filtered = useMemo(() => {
+    let arr = [...groups];
+    if (filter === 'pending')   arr = arr.filter(g => g.preds.some(p => p.status === 'pending'));
+    if (filter === 'evaluated') arr = arr.filter(g => g.preds.every(p => p.status !== 'pending'));
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      arr = arr.filter(g =>
+        g.home_team.toLowerCase().includes(q) ||
+        g.away_team.toLowerCase().includes(q) ||
+        g.preds.some(p => (p.nombre ?? '').toLowerCase().includes(q))
+      );
+    }
+    return arr;
+  }, [groups, filter, query]);
+
+  const bg      = isDark ? '#0D0D0D' : '#F5F7FA';
+  const cardBg  = isDark ? 'rgba(255,255,255,0.04)' : '#fff';
+  const border  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
 
   return (
     <ScrollView style={[s.root, { backgroundColor: bg }]} showsVerticalScrollIndicator={false}>
-      <LinearGradient colors={[hFrom, hTo]} style={s.header}>
+      <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
         <View style={s.circleL} />
-        <FadeSlide delay={0}>
+        <FadeSlide>
           <View style={s.headerRow}>
             <Pressable onPress={() => router.push('/(admin)')} style={s.backBtn}>
               <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
             </Pressable>
-            <LinearGradient colors={['#7f1d1d', '#450a0a']} style={s.iconGrad}>
-              <MaterialCommunityIcons name="soccer" size={22} color={ROJO} />
-            </LinearGradient>
-            <View>
-              <Text style={s.title}>Partidos más votados</Text>
-              <Text style={s.sub}>Top {rows.length} · modo demo</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.title}>Pronósticos</Text>
+              <Text style={s.sub}>{groups.reduce((a, g) => a + g.preds.length, 0)} pronósticos totales</Text>
             </View>
+            <Pressable onPress={fetchData} style={s.backBtn}>
+              <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
+            </Pressable>
           </View>
         </FadeSlide>
       </LinearGradient>
 
       <View style={s.content}>
+        {/* Búsqueda */}
+        <FadeSlide delay={30}>
+          <View style={[s.searchBox, { backgroundColor: cardBg, borderColor: border }]}>
+            <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.muted} />
+            <TextInput
+              value={query} onChangeText={setQuery}
+              placeholder="Buscar partido o usuario..."
+              placeholderTextColor={theme.colors.muted}
+              style={[s.searchInput, { color: theme.colors.text }]}
+            />
+          </View>
+        </FadeSlide>
+
         {/* Filtros */}
-        <FadeSlide delay={40}>
+        <FadeSlide delay={50}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtersRow}>
-            {(['all', ...fixturePhases] as const).map((p) => {
-              const active = phase === p;
+            {[
+              { v: 'all',       l: 'Todos',      c: CELESTE_DARK },
+              { v: 'pending',   l: 'Pendientes', c: '#F59E0B' },
+              { v: 'evaluated', l: 'Evaluados',  c: '#22C55E' },
+            ].map(f => {
+              const active = filter === f.v;
               return (
-                <Pressable key={p} onPress={() => setPhase(p)}
-                  style={[s.filterBtn, {
-                    borderColor: active ? rojoLight : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'),
-                    backgroundColor: active ? (isDark ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.10)') : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-                  }]}>
-                  <Text style={[s.filterTxt, { color: active ? rojoLight : textSub }]} numberOfLines={1}>
-                    {p === 'all' ? '🏆 Todos' : p}
-                  </Text>
+                <Pressable key={f.v} onPress={() => setFilter(f.v as any)}
+                  style={[s.filterBtn, { borderColor: active ? f.c : border, backgroundColor: active ? `${f.c}18` : 'transparent' }]}>
+                  <Text style={[s.filterTxt, { color: active ? f.c : theme.colors.muted }]}>{f.l}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
         </FadeSlide>
 
-        {/* Top 3 */}
-        {rows.length >= 3 && (
-          <FadeSlide delay={80}>
-            <View style={s.topThreeRow}>
-              {rows.slice(0, 3).map((r, idx) => {
-                const accent = rankColor(idx + 1);
-                const darkGrads: [string, string][] = [['#78350f', '#451a03'], ['#1e3a5f', '#0f2040'], ['#2d1a00', '#1a1000']];
-                const lightGrads: [string, string][] = [['#fef3c7', '#fde68a'], ['#dbeafe', '#bfdbfe'], ['#fed7aa', '#fdba74']];
-                const grad = isDark ? darkGrads[idx] : lightGrads[idx];
-                return (
-                  <LinearGradient key={r.id} colors={grad}
-                    style={[s.topCard, { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]}>
-                    <Text style={{ fontSize: idx === 0 ? 28 : 22 }}>
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-                    </Text>
-                    <Text style={[s.topLabel, { color: isDark ? '#fff' : '#111' }]} numberOfLines={2}>{r.label}</Text>
-                    <Text style={[s.topVotes, { color: accent }]}>{r.votes}</Text>
-                    <Text style={[s.topVotesLbl, { color: textSub }]}>votos</Text>
-                  </LinearGradient>
-                );
-              })}
-            </View>
-          </FadeSlide>
-        )}
+        {loading ? (
+          <View style={{ alignItems: 'center', padding: 48 }}>
+            <ActivityIndicator size="large" color={CELESTE_DARK} />
+          </View>
+        ) : filtered.length === 0 ? (
+          <View style={[s.emptyCard, { backgroundColor: cardBg, borderColor: border }]}>
+            <Text style={{ fontSize: 40 }}>🎯</Text>
+            <Text style={[s.emptyTxt, { color: theme.colors.muted }]}>No hay pronósticos todavía</Text>
+          </View>
+        ) : (
+          filtered.map((group, gi) => {
+            const homeCode = group.home_team.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+            const awayCode = group.away_team.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+            const dateStr  = group.match_date
+              ? new Date(group.match_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+              : '';
+            const hasPending = group.preds.some(p => p.status === 'pending');
 
-        {/* Lista */}
-        <View style={s.list}>
-          {rows.map((r, idx) => {
-            const pct    = Math.round((r.votes / maxVotes) * 100);
-            const accent = idx === 0 ? DORADO : idx === 1 ? '#94A3B8' : idx === 2 ? '#CD7F32' : rojoLight;
             return (
-              <FadeSlide key={r.id} delay={idx * 30}>
-                <View style={[s.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-                  <View style={s.cardGrad}>
-                    <Text style={[s.rank, { color: rankColor(idx + 1) }]}>{idx + 1}</Text>
-                    <View style={{ flex: 1, gap: 6 }}>
-                      <View style={s.cardTop}>
-                        <Text style={[s.matchLabel, { color: textPrimary }]} numberOfLines={1}>{r.label}</Text>
-                        <Text style={[s.votes, { color: accent }]}>{r.votes}</Text>
-                      </View>
-                      <AnimatedBar pct={pct} accent={accent} isDark={isDark} />
-                      <Text style={[s.phaseTxt, { color: textSub }]}>{r.phase}</Text>
+              <FadeSlide key={group.fixture_id} delay={gi * 25}>
+                <View style={[s.groupCard, { backgroundColor: cardBg, borderColor: border }]}>
+                  {/* Header del grupo */}
+                  <Pressable onPress={() => toggleExpand(group.fixture_id)} style={s.groupHeader}>
+                    <View style={s.teamsRow}>
+                      <TeamImg logo={group.home_logo} code={homeCode} size={28} />
+                      <Text style={[s.matchName, { color: theme.colors.text }]}>
+                        {group.home_team} vs {group.away_team}
+                      </Text>
+                      <TeamImg logo={group.away_logo} code={awayCode} size={28} />
                     </View>
-                  </View>
+                    <View style={s.groupMeta}>
+                      <Text style={[s.groupDate, { color: theme.colors.muted }]}>{dateStr}</Text>
+                      <View style={[s.countBadge, { backgroundColor: hasPending ? '#F59E0B18' : '#22C55E18' }]}>
+                        <Text style={[s.countText, { color: hasPending ? '#F59E0B' : '#22C55E' }]}>
+                          {group.preds.length} pronósticos
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons
+                        name={group.expanded ? 'chevron-up' : 'chevron-down'}
+                        size={18} color={theme.colors.muted}
+                      />
+                    </View>
+                  </Pressable>
+
+                  {/* Predicciones expandidas */}
+                  {group.expanded && (
+                    <View style={[s.predsContainer, { borderTopColor: border }]}>
+                      {group.preds.map(p => {
+                        const statusColor = p.status === 'correct' ? '#22C55E' : p.status === 'partial' ? '#F59E0B' : p.status === 'incorrect' ? '#ef4444' : theme.colors.muted;
+                        const statusLabel = p.status === 'correct' ? '✓ Exacto' : p.status === 'partial' ? '~ Ganador' : p.status === 'incorrect' ? '✗ Error' : 'Pendiente';
+                        const pickLabel   = p.pick_winner === 'home' ? group.home_team : p.pick_winner === 'away' ? group.away_team : 'Empate';
+                        return (
+                          <View key={p.id} style={[s.predRow, { borderBottomColor: border }]}>
+                            <View style={[s.predAvatar, { backgroundColor: `${CELESTE_DARK}18` }]}>
+                              <Text style={[s.predAvatarText, { color: CELESTE_DARK }]}>
+                                {(p.nombre ?? p.cliente_id).substring(0, 2).toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text style={[s.predName, { color: theme.colors.text }]}>{p.nombre ?? p.cliente_id}</Text>
+                              <Text style={[s.predPick, { color: theme.colors.muted }]}>
+                                {pickLabel} · {p.score_home ?? '-'} – {p.score_away ?? '-'}
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                              <Text style={[s.predStatus, { color: statusColor }]}>{statusLabel}</Text>
+                              {p.points_earned > 0 && (
+                                <Text style={[s.predPoints, { color: CELESTE_DARK }]}>+{p.points_earned} pts</Text>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               </FadeSlide>
             );
-          })}
-        </View>
+          })
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  root:     { flex: 1 },
-  header:   { paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20, position: 'relative', overflow: 'hidden' },
-  circleL:  { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: 'rgba(239,68,68,0.20)', top: -60, right: -40 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn:   { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  iconGrad:  { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  title:     { color: '#fff', fontSize: 20, fontWeight: '800' },
-  sub:       { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500', marginTop: 2 },
-  content:   { padding: 16, gap: 14 },
-  filtersRow: { gap: 8, paddingVertical: 2 },
-  filterBtn:  { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1 },
-  filterTxt:  { fontSize: 12, fontWeight: '700' },
-  topThreeRow: { flexDirection: 'row', gap: 8 },
-  topCard:    { flex: 1, borderRadius: 16, padding: 12, alignItems: 'center', gap: 6, borderWidth: 1 },
-  topLabel:   { fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 14 },
-  topVotes:   { fontSize: 18, fontWeight: '800' },
-  topVotesLbl: { fontSize: 9, fontWeight: '600' },
-  list:       { gap: 8, paddingBottom: 40 },
-  card:       { borderRadius: 16, borderWidth: 1 },
-  cardGrad:   { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  rank:       { width: 26, fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  cardTop:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  matchLabel: { flex: 1, fontSize: 13, fontWeight: '700' },
-  votes:      { fontSize: 16, fontWeight: '800' },
-  phaseTxt:   { fontSize: 11, fontWeight: '500' },
+  root:        { flex: 1 },
+  header:      { paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20, overflow: 'hidden', position: 'relative' },
+  circleL:     { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: 'rgba(110,198,255,0.20)', top: -60, right: -40 },
+  headerRow:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn:     { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  title:       { color: '#fff', fontSize: 20, fontWeight: '800' },
+  sub:         { color: 'rgba(255,255,255,0.68)', fontSize: 12, marginTop: 2 },
+  content:     { padding: 16, gap: 12, paddingBottom: 60 },
+  searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14 },
+  searchInput: { flex: 1, height: 46, fontSize: 14 },
+  filtersRow:  { gap: 8, paddingVertical: 2 },
+  filterBtn:   { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, marginRight: 4 },
+  filterTxt:   { fontSize: 12, fontWeight: '700' },
+  emptyCard:   { alignItems: 'center', paddingVertical: 48, gap: 12, borderRadius: 20, borderWidth: 1 },
+  emptyTxt:    { fontSize: 14, fontWeight: '600' },
+  groupCard:   { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  groupHeader: { padding: 14, gap: 8 },
+  teamsRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  matchName:   { flex: 1, fontSize: 14, fontWeight: '700' },
+  groupMeta:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  groupDate:   { fontSize: 12, fontWeight: '500' },
+  countBadge:  { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  countText:   { fontSize: 12, fontWeight: '700' },
+  predsContainer: { borderTopWidth: 1 },
+  predRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: 1 },
+  predAvatar:  { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  predAvatarText: { fontSize: 12, fontWeight: '800' },
+  predName:    { fontSize: 13, fontWeight: '700' },
+  predPick:    { fontSize: 12, fontWeight: '500' },
+  predStatus:  { fontSize: 12, fontWeight: '700' },
+  predPoints:  { fontSize: 12, fontWeight: '700' },
 });

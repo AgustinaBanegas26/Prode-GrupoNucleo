@@ -6,7 +6,7 @@ import {
   Alert,
   Animated,
   Image,
-  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,24 +17,57 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { Screen } from '../../src/components/Screen';
-import { getUpcomingMatches } from '../../src/features/mockData';
+import { useUpcomingMatches } from '../../src/hooks/useApiFootball';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
+import { supabase } from '../../src/lib/supabase';
 
-// ── Paleta ────────────────────────────────────────────────────
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
 const CELESTE_BG   = '#DDF4FF';
 const DEEP         = '#0F4C81';
 const RED          = '#CC2627';
 
-// URL de términos y condiciones
-const TERMS_URL = 'https://gruponcleo.com.ar/terminos-y-condiciones';
+// ── Subir imagen a Supabase Storage ──────────────────────────
+async function uploadAvatar(clienteId: string, uri: string): Promise<string | null> {
+  try {
+    const path = `${clienteId}/profile.jpg`;
 
-// ── Logo con fallback a emoji ─────────────────────────────────
-function TeamLogoPerfil({ code, size = 52 }: { code: string; size?: number }) {
+    if (Platform.OS === 'web') {
+      // Web: usar fetch + blob
+      const res  = await fetch(uri);
+      const blob = await res.blob();
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw error;
+    } else {
+      // Móvil: usar FormData + fetch
+      const formData = new FormData();
+      formData.append('file', { uri, name: 'profile.jpg', type: 'image/jpeg' } as any);
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(path, formData, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw error;
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    // Añadir timestamp para evitar caché
+    return `${data.publicUrl}?t=${Date.now()}`;
+  } catch (e: any) {
+    console.error('[uploadAvatar]', e?.message);
+    return null;
+  }
+}
+
+// ── Logo próximo partido con fallback emoji ───────────────────
+function TeamLogoPerfil({ logo, code, size = 52 }: { logo?: string; code: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
   const emoji = getFlagEmoji(code);
+  if (logo && !failed) {
+    return <Image source={{ uri: logo }} style={{ width: size, height: size }} resizeMode="contain" onError={() => setFailed(true)} />;
+  }
   return <Text style={{ fontSize: size * 0.78, lineHeight: size }}>{emoji}</Text>;
 }
 
@@ -106,24 +139,61 @@ export default function ProfileScreen() {
 
   const [displayName, setDisplayName] = useState(user?.nombre ?? 'Usuario');
   const [avatarUri,   setAvatarUri]   = useState<string | null>(null);
+  const [uploading,   setUploading]   = useState(false);
   const [editing,     setEditing]     = useState(false);
   const [editName,    setEditName]    = useState(displayName);
 
   const initials = displayName.substring(0, 2).toUpperCase();
-  const clientId = user?.role === 'admin'
-    ? `Administrador`
-    : `Cliente #${user?.cliente_id ?? ''}`;
+  const clientId = user?.role === 'admin' ? `Administrador` : `Cliente #${user?.cliente_id ?? ''}`;
   const bg = theme.isDark ? '#0D0D0D' : '#F5F7FA';
 
-  // Próximo partido desde mockData
-  const nextMatch = getUpcomingMatches(1)[0] ?? null;
+  // ── Cargar avatar desde Supabase al montar ────────────────
+  useEffect(() => {
+    if (!user?.cliente_id) return;
+    supabase
+      .from('clientes')
+      .select('avatar_url, nombre')
+      .eq('cliente_id', user.cliente_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.avatar_url) setAvatarUri(data.avatar_url);
+        if (data?.nombre)     setDisplayName(data.nombre);
+      });
+  }, [user?.cliente_id]);
 
-  // Estadísticas — valores por defecto hasta integrar API real
-  const totalPoints  = 0;
-  const exactHits    = 0;
-  const efectividad  = '0%';
+  // ── Próximo partido desde API ─────────────────────────────
+  const { data: apiUpcoming } = useUpcomingMatches(1);
+  const nextMatch = React.useMemo(() => {
+    if (apiUpcoming && apiUpcoming.length > 0) {
+      const m = apiUpcoming[0];
+      return { id: String(m.id), homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+        homeCode: m.homeCode, awayCode: m.awayCode,
+        homeLogo: m.homeLogo || undefined, awayLogo: m.awayLogo || undefined,
+        time: m.time, date: m.date };
+    }
+    return null;
+  }, [apiUpcoming]);
 
-  // ── Selector de foto ──────────────────────────────────────
+  // ── Estadísticas reales desde Supabase ───────────────────
+  const [stats, setStats] = useState({ points: 0, exact: 0, efectividad: '0%' });
+  useEffect(() => {
+    if (!user?.cliente_id) return;
+    supabase
+      .from('ranking')
+      .select('total_points, correct_exact, total_played')
+      .eq('cliente_id', user.cliente_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const ef = data.total_played > 0
+            ? `${Math.round((data.correct_exact / data.total_played) * 100)}%`
+            : '0%';
+          setStats({ points: data.total_points ?? 0, exact: data.correct_exact ?? 0, efectividad: ef });
+        }
+      });
+  }, [user?.cliente_id]);
+
+  // ── Selector y subida de foto ─────────────────────────────
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -137,25 +207,38 @@ export default function ProfileScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setAvatarUri(uri); // preview inmediato
+      setUploading(true);
+      const publicUrl = await uploadAvatar(user?.cliente_id ?? user?.id ?? 'user', uri);
+      if (publicUrl) {
+        // Guardar URL en Supabase
+        await supabase
+          .from('clientes')
+          .update({ avatar_url: publicUrl })
+          .eq('cliente_id', user?.cliente_id ?? '');
+        setAvatarUri(publicUrl);
+      } else {
+        Alert.alert('Error', 'No se pudo subir la foto. Intentá de nuevo.');
+      }
+      setUploading(false);
     }
   };
 
-  const saveEdit = () => {
-    setDisplayName(editName.trim() || displayName);
+  const saveEdit = async () => {
+    const nombre = editName.trim() || displayName;
+    setDisplayName(nombre);
     setEditing(false);
+    // Guardar nombre en Supabase
+    if (user?.cliente_id) {
+      await supabase
+        .from('clientes')
+        .update({ nombre })
+        .eq('cliente_id', user.cliente_id);
+    }
   };
 
-  const cancelEdit = () => {
-    setEditName(displayName);
-    setEditing(false);
-  };
-
-  const openTerms = () => {
-    Linking.openURL(TERMS_URL).catch(() =>
-      Alert.alert('Error', 'No se pudo abrir los términos y condiciones.')
-    );
-  };
+  const cancelEdit = () => { setEditName(displayName); setEditing(false); };
 
   return (
     <Screen style={{ backgroundColor: bg }}>
@@ -208,8 +291,11 @@ export default function ProfileScreen() {
                   <Text style={hdrS.avatarText}>{initials}</Text>
                 </View>
               )}
-              <View style={hdrS.cameraBadge}>
-                <Feather name="camera" size={12} color="#fff" />
+              <View style={[hdrS.cameraBadge, uploading && { backgroundColor: '#F59E0B' }]}>
+                {uploading
+                  ? <Feather name="upload-cloud" size={12} color="#fff" />
+                  : <Feather name="camera" size={12} color="#fff" />
+                }
               </View>
             </Pressable>
 
@@ -329,9 +415,9 @@ export default function ProfileScreen() {
           <FadeSlide delay={120}>
             <Text style={[secS.title, { color: theme.colors.text }]}>Mis estadísticas</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-              <StatCard icon="🏆" label="Puntos"       value={totalPoints} />
-              <StatCard icon="🎯" label="Exactos"      value={exactHits} />
-              <StatCard icon="📈" label="Efectividad"  value={efectividad} />
+              <StatCard icon="🏆" label="Puntos"       value={stats.points} />
+              <StatCard icon="🎯" label="Exactos"      value={stats.exact} />
+              <StatCard icon="📈" label="Efectividad"  value={stats.efectividad} />
             </View>
           </FadeSlide>
 
@@ -341,20 +427,11 @@ export default function ProfileScreen() {
           {nextMatch && (
             <FadeSlide delay={180}>
               <Text style={[secS.title, { color: theme.colors.text }]}>Próximo partido</Text>
-              <View style={[
-                nmS.card,
-                {
-                  backgroundColor: theme.isDark ? '#171717' : '#fff',
-                  borderColor: theme.isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)',
-                  marginTop: 10,
-                },
-              ]}>
+              <View style={[nmS.card, { backgroundColor: theme.isDark ? '#171717' : '#fff', borderColor: theme.isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)', marginTop: 10 }]}>
                 <View style={nmS.row}>
                   <View style={nmS.teamCol}>
-                    <TeamLogoPerfil code={nextMatch.homeCode} size={52} />
-                    <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
-                      {nextMatch.homeTeam}
-                    </Text>
+                    <TeamLogoPerfil logo={nextMatch.homeLogo} code={nextMatch.homeCode} size={52} />
+                    <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>{nextMatch.homeTeam}</Text>
                   </View>
                   <View style={nmS.center}>
                     <Text style={[nmS.vs, { color: theme.colors.muted }]}>VS</Text>
@@ -362,10 +439,8 @@ export default function ProfileScreen() {
                     <Text style={[nmS.date, { color: theme.colors.muted }]}>{nextMatch.date}</Text>
                   </View>
                   <View style={nmS.teamCol}>
-                    <TeamLogoPerfil code={nextMatch.awayCode} size={52} />
-                    <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
-                      {nextMatch.awayTeam}
-                    </Text>
+                    <TeamLogoPerfil logo={nextMatch.awayLogo} code={nextMatch.awayCode} size={52} />
+                    <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>{nextMatch.awayTeam}</Text>
                   </View>
                 </View>
                 <Pressable
@@ -386,47 +461,11 @@ export default function ProfileScreen() {
             </FadeSlide>
           )}
 
-          {/* ══════════════════════════════════════════════════
-              TÉRMINOS Y CONDICIONES
-          ══════════════════════════════════════════════════ */}
-          <FadeSlide delay={220}>
-            <Pressable
-              onPress={openTerms}
-              style={({ pressed }) => [
-                termsS.btn,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-              accessibilityRole="link"
-              accessibilityLabel="Ver términos y condiciones"
-            >
-              <Feather name="file-text" size={16} color={theme.colors.textSecondary} />
-              <Text style={[termsS.text, { color: theme.colors.textSecondary }]}>
-                Términos y condiciones
-              </Text>
-              <Feather name="external-link" size={14} color={theme.colors.muted} style={{ marginLeft: 'auto' }} />
-            </Pressable>
-          </FadeSlide>
-
-          {/* ══════════════════════════════════════════════════
-              CERRAR SESIÓN
-          ══════════════════════════════════════════════════ */}
-          <FadeSlide delay={260}>
+          {/* ══ CERRAR SESIÓN ══ */}
+          <FadeSlide delay={240}>
             <Pressable
               onPress={async () => { await logout(); router.replace('/(auth)/login'); }}
-              style={({ pressed }) => [
-                logoutS.btn,
-                {
-                  borderColor: RED,
-                  backgroundColor: theme.isDark ? 'rgba(204,38,39,0.08)' : 'rgba(204,38,39,0.05)',
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Cerrar sesión"
+              style={({ pressed }) => [logoutS.btn, { borderColor: RED, backgroundColor: theme.isDark ? 'rgba(204,38,39,0.08)' : 'rgba(204,38,39,0.05)', opacity: pressed ? 0.7 : 1 }]}
             >
               <Ionicons name="log-out-outline" size={18} color={RED} />
               <Text style={[logoutS.text, { color: RED }]}>Cerrar sesión</Text>
@@ -524,19 +563,6 @@ const nmS = StyleSheet.create({
   btn:  { borderRadius: 14, overflow: 'hidden' },
   btnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-});
-
-const termsS = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-  },
-  text: { fontSize: 15, fontWeight: '600' },
 });
 
 const logoutS = StyleSheet.create({
