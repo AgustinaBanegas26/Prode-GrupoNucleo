@@ -168,6 +168,36 @@ export function RankingsScreen() {
           >
             <Text style={s.recalcText}>Recalcular puntos</Text>
           </Pressable>
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                '⚠️ Resetear estadísticas',
+                'Se borrarán puntos, predicciones y ranking. Los usuarios y sus datos permanecen intactos.',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  {
+                    text: 'Confirmar reset',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        if (!user?.adminToken) {
+                          Alert.alert('Error', 'Se requiere token admin');
+                          return;
+                        }
+                        await adminApiFetch('/admin/reset-stats', user.adminToken, { method: 'DELETE' });
+                        Alert.alert('✓', 'Estadísticas reseteadas. Usuarios intactos.');
+                      } catch (e) {
+                        Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo resetear');
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+            style={[s.recalcBtn, { backgroundColor: '#CC2627' }]}
+          >
+            <Text style={s.recalcText}>Resetear estadísticas</Text>
+          </Pressable>
         </View>
 
         <View style={s.list}>

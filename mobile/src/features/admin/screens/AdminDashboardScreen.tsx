@@ -21,7 +21,6 @@ import { useAuth } from '../../../providers/AuthProvider';
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
 const DEEP_BLUE    = '#0F4C81';
-const RED          = '#CC2627';
 
 type MenuOption = {
   id: string;
@@ -32,7 +31,8 @@ type MenuOption = {
 };
 
 const MENU_OPTIONS: MenuOption[] = [
-  { id: '1', icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
+  { id: '1',  icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
+  { id: '14', icon: 'soccer-field',     label: 'Partidos',          description: 'Crear, editar y cargar resultados',  route: '/(admin)/matches'       },
   { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
   { id: '12', icon: 'bell',            label: 'Notificaciones',    description: 'Push manual e historial',            route: '/(admin)/notifications'  },
   { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'       },
@@ -63,9 +63,14 @@ export function AdminDashboardScreen() {
   const log        = useAdminActivityStore((s) => s.log);
   const users      = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
+  const startUsersRealtime = useUsersStore((s) => s.startRealtime);
   const { data: allPredictions = [] } = useAllPredictions();
 
   useEffect(() => { refreshUsers(); }, [refreshUsers]);
+  useEffect(() => {
+    const cleanup = startUsersRealtime();
+    return cleanup;
+  }, [startUsersRealtime]);
 
   const stats = useMemo(() => {
     const totalUsers  = users.length;
@@ -170,7 +175,7 @@ export function AdminDashboardScreen() {
           <Text style={[s.sectionTitle, { color: theme.colors.text }]}>⚽  Módulos</Text>
           <View style={s.menuGrid}>
             {MENU_OPTIONS.map((opt, idx) => (
-              <MenuCard key={opt.id} option={opt} theme={theme} isDark={isDark} delay={idx * 40} onPress={() => router.push(opt.route as any)} />
+              <MenuCard key={opt.id} option={opt} theme={theme} isDark={isDark} onPress={() => router.push(opt.route as any)} />
             ))}
           </View>
         </FadeSlide>
@@ -180,8 +185,8 @@ export function AdminDashboardScreen() {
   );
 }
 
-function MenuCard({ option, theme, isDark, delay, onPress }: {
-  option: MenuOption; theme: any; isDark: boolean; delay: number; onPress: () => void;
+function MenuCard({ option, theme, isDark, onPress }: {
+  option: MenuOption; theme: any; isDark: boolean; onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const onPressIn  = () => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, damping: 15, stiffness: 300 }).start();

@@ -314,6 +314,25 @@ app.put('/admin/app/version/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /admin/reset-stats
+ * Resetea estadísticas: scores, ranking_cache, predictions, notifications, resultados de partidos.
+ * NO toca usuarios, credenciales, scoring_config, slider, APK versions.
+ * Requiere JWT admin.
+ */
+app.delete('/admin/reset-stats', requireAdmin, async (_req, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.rpc('reset_all_stats');
+    if (error) throw new Error(error.message);
+    log('reset-stats ejecutado por admin');
+    return res.json({ success: true, message: 'Estadísticas reseteadas. Usuarios y datos intactos.' });
+  } catch (err) {
+    logError('DELETE /admin/reset-stats', err);
+    return sendError(res, 500, err.message);
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 function startServer() {

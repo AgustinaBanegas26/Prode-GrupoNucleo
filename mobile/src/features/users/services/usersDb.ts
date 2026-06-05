@@ -5,7 +5,7 @@ const normalizeClienteId = (n: string) => n.trim();
 const normalizeNombre = (n: string) => n.trim();
 const normalizeEmail = (e: string | null | undefined) => (typeof e === 'string' ? e.trim().toLowerCase() : null);
 
-function mapRowToUser(row: any): AppUser {
+export function mapRowToUser(row: any): AppUser {
   return {
     id: String(row.id),
     clienteId: String(row.cliente_id),
