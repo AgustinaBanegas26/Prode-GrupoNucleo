@@ -51,21 +51,22 @@ function useRankingData() {
     setLoading(true);
     setError(null);
     try {
+      // Schema real: cliente_id, nombre, total_points, total_played, correct_exact, correct_winner, position
       const { data: rows, error: err } = await supabase
         .from('ranking')
-        .select('user_id, cliente_id, nombre, total_points, total_played, correct_exact, position')
+        .select('id, cliente_id, nombre, total_points, total_played, correct_exact, position')
         .order('total_points', { ascending: false });
 
       if (err) throw err;
 
       const entries: RankingEntry[] = (rows ?? []).map((r, i) => ({
-        id:        r.user_id,
+        id:        r.id ?? r.cliente_id,
         position:  r.position ?? i + 1,
         name:      r.nombre ?? `Cliente ${r.cliente_id}`,
         points:    r.total_points ?? 0,
         played:    r.total_played ?? 0,
         diff:      r.correct_exact ?? 0,
-        isCurrent: r.user_id === user?.id,
+        isCurrent: r.cliente_id === user?.cliente_id,
       }));
 
       setData(entries);
