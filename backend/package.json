@@ -4,9 +4,12 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "start": "node src/index.js",
     "start:jobs": "node src/jobs/startJobs.js",
+    "start:server": "node src/server.js",
     "sync:fixture": "node -e \"const {syncAllMatches}=require('./src/services/matchSync'); syncAllMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\"",
-    "sync:finished": "node -e \"const {syncFinishedMatches}=require('./src/services/matchSync'); syncFinishedMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\""
+    "sync:finished": "node -e \"const {syncFinishedMatches}=require('./src/services/matchSync'); syncFinishedMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\"",
+    "sync:all": "node -e \"const {syncAllMatches}=require('./src/services/matchSync'); syncAllMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
