@@ -11,14 +11,7 @@
       "expo-router",
       "expo-font",
       "expo-sharing",
-      "expo-status-bar",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#6EC6FF"
-        }
-      ]
+      "expo-status-bar"
     ],
     "ios": {
       "supportsTablet": true

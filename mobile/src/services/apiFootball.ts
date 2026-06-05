@@ -99,8 +99,8 @@ function extractGroup(round: string): string | null {
 
 /** Código corto de 3 letras a partir del nombre del equipo */
 function teamCode(name: string): string {
-  // Usar primeras 3 letras del nombre, sin espacios
-  return name.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+  if (!name) return '???';
+  return name.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || '???';
 }
 
 function formatDate(isoDate: string): string {
@@ -252,7 +252,7 @@ export async function getStandings(): Promise<NormalizedGroup[]> {
   for (const wrapper of raw) {
     for (const groupArray of wrapper.league.standings) {
       if (!groupArray.length) continue;
-      const groupName = groupArray[0].group;   // "Group A"
+      const groupName = groupArray[0].group ?? 'General';
       const label = groupName.replace('Group ', 'Grupo ');
       groups.push({
         name:  label,

@@ -178,7 +178,6 @@ function mapPhase(stage: string): string {
 
 function mapGroup(group: string | null): string | null {
   if (!group) return null;
-  // "GROUP_A" → "Grupo A"
   return group.replace('GROUP_', 'Grupo ');
 }
 
@@ -224,7 +223,7 @@ const TLA_TO_CODE: Record<string, string> = {
 };
 
 function toCode(tla: string | null | undefined, shortName: string): string {
-  if (!tla) return shortName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+  if (!tla) return (shortName ?? '').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || '???';
   const upper = tla.toUpperCase();
   return TLA_TO_CODE[upper] ?? upper;
 }
