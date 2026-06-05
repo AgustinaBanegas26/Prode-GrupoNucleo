@@ -12,7 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { predictions } from '../../mockData';
+import { useAllPredictions } from '../../content/api/predictions';
 import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 
@@ -83,6 +83,7 @@ export function ParticipationTrackingScreen() {
   const users        = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
   const activity     = useAdminActivityStore((s) => s.items);
+  const { data: allPredictions = [] } = useAllPredictions();
 
   useEffect(() => { refreshUsers(); }, [refreshUsers]);
 
@@ -91,10 +92,10 @@ export function ParticipationTrackingScreen() {
     const activeUsers  = users.filter((u) => u.activo).length;
     const blockedUsers = users.filter((u) => !u.activo).length;
     const inactiveUsers = 0;
-    const predictionsCount = predictions.length;
+    const predictionsCount = allPredictions.length;
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
     return { totalUsers, activeUsers, inactiveUsers, blockedUsers, predictionsCount, participationPct };
-  }, [users]);
+  }, [users, allPredictions]);
 
   const recent = useMemo(() => activity.slice(0, 12), [activity]);
 

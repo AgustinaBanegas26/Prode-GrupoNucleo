@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { predictions } from '../../mockData';
+import { useAllPredictions } from '../../content/api/predictions';
 import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -33,12 +33,16 @@ type MenuOption = {
 
 const MENU_OPTIONS: MenuOption[] = [
   { id: '1', icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
-  { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Clasificaciones generales',          route: '/(admin)/rankings'       },
+  { id: '10', icon: 'soccer',          label: 'Partidos',          description: 'Resultados y estados de partidos',   route: '/(admin)/matches'        },
+  { id: '11', icon: 'newspaper',       label: 'Novedades',         description: 'Noticias publicadas en la app',      route: '/(admin)/news'           },
+  { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
+  { id: '12', icon: 'bell',            label: 'Notificaciones',    description: 'Push manual e historial',            route: '/(admin)/notifications'  },
+  { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'       },
+  { id: '13', icon: 'cellphone',       label: 'Versiones APK',     description: 'Actualizaciones de la aplicación',   route: '/(admin)/app-versions'   },
   { id: '2', icon: 'chart-line',       label: 'Estadísticas',      description: 'Datos y métricas en tiempo real',    route: '/(admin)/statistics'     },
   { id: '6', icon: 'chart-box',        label: 'Participación',     description: 'Seguimiento de participación',       route: '/(admin)/participation'  },
-  { id: '7', icon: 'soccer',           label: 'Partidos Votados',  description: 'Partidos con más pronósticos',        route: '/(admin)/voted-matches'  },
+  { id: '7', icon: 'vote',             label: 'Predicciones',      description: 'Partidos con más pronósticos',        route: '/(admin)/voted-matches'  },
   { id: '8', icon: 'history',          label: 'Actividad',         description: 'Registro de eventos del admin',       route: '/(admin)/user-activity'  },
-  { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
 ];
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
@@ -61,16 +65,17 @@ export function AdminDashboardScreen() {
   const log        = useAdminActivityStore((s) => s.log);
   const users      = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
+  const { data: allPredictions = [] } = useAllPredictions();
 
   useEffect(() => { refreshUsers(); }, [refreshUsers]);
 
   const stats = useMemo(() => {
     const totalUsers  = users.length;
     const activeUsers = users.filter((u) => u.activo).length;
-    const predictionsCount = predictions.length;
+    const predictionsCount = allPredictions.length;
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
     return { totalUsers, activeUsers, predictionsCount, participationPct };
-  }, [users]);
+  }, [users, allPredictions]);
 
   const handleLogout = async () => {
     log({ action: 'logout', module: 'auth', title: 'Cierre de sesión admin' });

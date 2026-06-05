@@ -15,6 +15,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useCallback } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -23,11 +24,14 @@ import {
   Text,
   TextInput,
   View,
-  ScrollView,
 } from 'react-native';
 
 import { Screen } from '../../src/components/Screen';
-import { fixtures } from '../../src/features/mockData';
+import { useMatches } from '../../src/features/content/api/matches';
+import { usePredictions, useUpsertPrediction } from '../../src/features/content/api/predictions';
+import { toMatchItemFromDb } from '../../src/features/matchesAdapter';
+import type { MatchItem } from '../../src/features/matchesAdapter';
+import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
 
@@ -60,12 +64,9 @@ function formatDateLabel(date: string): string {
   return date;
 }
 
-// ── Agrupar partidos por fecha ────────────────────────────────
-function groupByDate(matchIds: string[]) {
-  const map = new Map<string, typeof fixtures>();
-  for (const id of matchIds) {
-    const match = fixtures.find(m => m.id === id);
-    if (!match) continue;
+function groupByDate(matches: MatchItem[]) {
+  const map = new Map<string, MatchItem[]>();
+  for (const match of matches) {
     const label = formatDateLabel(match.date);
     const list = map.get(label) ?? [];
     list.push(match);
@@ -84,13 +85,14 @@ type MatchCardProps = {
   group?: string;
   time: string;
   saved: SavedPrediction | null;
+  locked?: boolean;
   onSave: (matchId: string, home: string, away: string) => void;
   onEdit: (matchId: string) => void;
 };
 
 function MatchCard({
   matchId, homeTeam, awayTeam, homeCode, awayCode,
-  group, time, saved, onSave, onEdit,
+  group, time, saved, locked, onSave, onEdit,
 }: MatchCardProps) {
   const { theme } = useAppTheme();
   const [home, setHome] = useState(saved?.home ?? '');
@@ -220,12 +222,14 @@ function MatchCard({
               {saved!.home} - {saved!.away}
             </Text>
           </Text>
-          <Pressable
-            onPress={handleEdit}
-            style={[card.editBtn, { backgroundColor: CELESTE }]}
-          >
-            <Text style={card.editBtnText}>Editar</Text>
-          </Pressable>
+          {!locked ? (
+            <Pressable
+              onPress={handleEdit}
+              style={[card.editBtn, { backgroundColor: CELESTE }]}
+            >
+              <Text style={card.editBtnText}>Editar</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -340,28 +344,75 @@ const card = StyleSheet.create({
 // ── Pantalla principal ────────────────────────────────────────
 export default function PronosticosScreen() {
   const { theme } = useAppTheme();
+  const { user } = useAuth();
+  const clienteId = user?.cliente_id ?? '';
   const [activeTab, setActiveTab] = useState<Tab>('PENDIENTES');
-  // saved: { matchId → { home, away } }
-  const [saved, setSaved] = useState<Record<string, SavedPrediction>>({});
+  const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
 
-  const handleSave = useCallback((matchId: string, home: string, away: string) => {
-    setSaved(prev => ({ ...prev, [matchId]: { matchId, home, away } }));
-  }, []);
+  const { data: matchesRaw } = useMatches();
+  const { data: predictions = [] } = usePredictions(clienteId);
+  const upsertPrediction = useUpsertPrediction();
+
+  const upcomingMatches = React.useMemo(() => {
+    const now = Date.now();
+    return (matchesRaw ?? [])
+      .map(toMatchItemFromDb)
+      .filter((m) => {
+        const row = matchesRaw?.find((r) => String(r.fixture_id) === m.id);
+        if (!row?.match_date) return true;
+        const status = row.status ?? '';
+        if (['FT', 'AET', 'PEN'].includes(status)) return false;
+        return new Date(row.match_date).getTime() > now - 3 * 60 * 60 * 1000;
+      });
+  }, [matchesRaw]);
+
+  const predByFixture = React.useMemo(() => {
+    const map = new Map<string, (typeof predictions)[0]>();
+    for (const p of predictions) {
+      map.set(String(p.fixture_id), p);
+    }
+    return map;
+  }, [predictions]);
+
+  const isComplete = (fixtureId: string) => {
+    const p = predByFixture.get(fixtureId);
+    return p != null && p.home_goals != null && p.away_goals != null && !editingIds.has(fixtureId);
+  };
+
+  const pendingMatches = upcomingMatches.filter((m) => !isComplete(m.id));
+  const completedMatches = upcomingMatches.filter((m) => isComplete(m.id));
+  const currentMatches = activeTab === 'PENDIENTES' ? pendingMatches : completedMatches;
+
+  const sections = groupByDate(currentMatches);
+
+  const handleSave = useCallback(
+    async (matchId: string, home: string, away: string) => {
+      if (!clienteId) return;
+      const h = parseInt(home, 10);
+      const a = parseInt(away, 10);
+      if (Number.isNaN(h) || Number.isNaN(a)) return;
+      try {
+        await upsertPrediction.mutateAsync({
+          cliente_id: clienteId,
+          fixture_id: Number(matchId),
+          home_goals: h,
+          away_goals: a,
+        });
+        setEditingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(matchId);
+          return next;
+        });
+      } catch (e) {
+        Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar');
+      }
+    },
+    [clienteId, upsertPrediction],
+  );
 
   const handleEdit = useCallback((matchId: string) => {
-    setSaved(prev => {
-      const next = { ...prev };
-      delete next[matchId];
-      return next;
-    });
+    setEditingIds((prev) => new Set(prev).add(matchId));
   }, []);
-
-  // IDs por tab
-  const pendingIds   = fixtures.filter(m => !saved[m.id]).map(m => m.id);
-  const completedIds = fixtures.filter(m => !!saved[m.id]).map(m => m.id);
-  const currentIds   = activeTab === 'PENDIENTES' ? pendingIds : completedIds;
-
-  const sections = groupByDate(currentIds);
 
   const bg = theme.isDark ? '#0D0D0D' : '#F5F7FA';
 
@@ -395,7 +446,7 @@ export default function PronosticosScreen() {
                 >
                   {tab === 'COMPLETADOS' && (
                     <View style={[scr.tabDot, {
-                      backgroundColor: completedIds.length > 0 ? '#22C55E' : theme.colors.muted,
+                      backgroundColor: completedMatches.length > 0 ? '#22C55E' : theme.colors.muted,
                     }]} />
                   )}
                   <Text style={[scr.tabText, {
@@ -403,8 +454,8 @@ export default function PronosticosScreen() {
                     fontWeight: active ? '700' : '500',
                   }]}>
                     {tab === 'PENDIENTES' ? 'Pendientes' : 'Completados'}
-                    {tab === 'COMPLETADOS' && completedIds.length > 0
-                      ? ` (${completedIds.length})` : ''}
+                    {tab === 'COMPLETADOS' && completedMatches.length > 0
+                      ? ` (${completedMatches.length})` : ''}
                   </Text>
                 </Pressable>
               );
@@ -455,20 +506,32 @@ export default function PronosticosScreen() {
                 {section.title}
               </Text>
             )}
-            renderItem={({ item }) => (
-              <MatchCard
-                matchId={item.id}
-                homeTeam={item.homeTeam}
-                awayTeam={item.awayTeam}
-                homeCode={item.homeCode}
-                awayCode={item.awayCode}
-                group={item.group ?? item.phase}
-                time={item.time}
-                saved={saved[item.id] ?? null}
-                onSave={handleSave}
-                onEdit={handleEdit}
-              />
-            )}
+            renderItem={({ item }) => {
+              const pred = predByFixture.get(item.id);
+              const savedPred =
+                pred?.home_goals != null && pred?.away_goals != null
+                  ? {
+                      matchId: item.id,
+                      home: String(pred.home_goals),
+                      away: String(pred.away_goals),
+                    }
+                  : null;
+              return (
+                <MatchCard
+                  matchId={item.id}
+                  homeTeam={item.homeTeam}
+                  awayTeam={item.awayTeam}
+                  homeCode={item.homeCode}
+                  awayCode={item.awayCode}
+                  group={item.group ?? item.phase}
+                  time={item.time}
+                  saved={savedPred}
+                  locked={!!pred?.locked}
+                  onSave={handleSave}
+                  onEdit={handleEdit}
+                />
+              );
+            }}
           />
         )}
       </KeyboardAvoidingView>

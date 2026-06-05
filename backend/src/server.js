@@ -23,6 +23,10 @@ const {
   updateVersion,
   listVersions,
 } = require('./services/appVersionService');
+const { loginAdmin } = require('./services/adminAuthService');
+const { getSupabaseAdmin } = require('./services/supabaseAdmin');
+const { processOutboxBatch } = require('./services/pushService');
+const { notifyNewAppVersion } = require('./services/notificationJobs');
 
 const app = express();
 app.use(express.json());
@@ -130,7 +134,103 @@ app.get('/app/version', async (_req, res) => {
   }
 });
 
+// ─── Auth admin (JWT) ─────────────────────────────────────────────────────────
+
+/**
+ * POST /admin/auth/login
+ * Body: { usuario, password }
+ */
+app.post('/admin/auth/login', async (req, res) => {
+  try {
+    const { usuario, password } = req.body ?? {};
+    if (!usuario || !password) {
+      return sendError(res, 400, 'usuario y password son requeridos');
+    }
+    const result = await loginAdmin(String(usuario), String(password));
+    return res.json(result);
+  } catch (err) {
+    logError('POST /admin/auth/login', err);
+    return sendError(res, 401, err.message);
+  }
+});
+
 // ─── Rutas admin (requieren JWT con role=admin) ───────────────────────────────
+
+/**
+ * POST /admin/notifications/send
+ * Encola push manual + historial.
+ */
+app.post('/admin/notifications/send', requireAdmin, async (req, res) => {
+  try {
+    const { title, body, audience, target_user_id } = req.body ?? {};
+    if (!title?.trim() || !body?.trim()) {
+      return sendError(res, 400, 'title y body son requeridos');
+    }
+    const aud = audience ?? 'global';
+    const supabase = getSupabaseAdmin();
+
+    await supabase.from('notifications').insert({
+      title: title.trim(),
+      body: body.trim(),
+      audience: aud,
+      target_user_id: target_user_id ?? null,
+      sent_at: new Date().toISOString(),
+    });
+
+    await supabase.from('notifications_outbox').insert({
+      event_type: 'manual',
+      title: title.trim(),
+      body: body.trim(),
+      audience: aud,
+      target_user_id: target_user_id ?? null,
+      status: 'pending',
+    });
+
+    await processOutboxBatch(5);
+
+    return res.json({ success: true });
+  } catch (err) {
+    logError('POST /admin/notifications/send', err);
+    return sendError(res, 500, err.message);
+  }
+});
+
+/**
+ * POST /admin/scoring/recalculate
+ * Body opcional: { fixture_id }
+ */
+app.post('/admin/scoring/recalculate', requireAdmin, async (req, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const fixtureId = req.body?.fixture_id;
+
+    if (fixtureId != null) {
+      const { error } = await supabase.rpc('calculate_match_scores', {
+        p_fixture_id: Number(fixtureId),
+      });
+      if (error) throw new Error(error.message);
+    } else {
+      const { data: finished, error: mErr } = await supabase
+        .from('matches')
+        .select('fixture_id')
+        .not('home_goals', 'is', null)
+        .not('away_goals', 'is', null);
+      if (mErr) throw new Error(mErr.message);
+
+      for (const m of finished ?? []) {
+        const { error } = await supabase.rpc('calculate_match_scores', {
+          p_fixture_id: m.fixture_id,
+        });
+        if (error) throw new Error(error.message);
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    logError('POST /admin/scoring/recalculate', err);
+    return sendError(res, 500, err.message);
+  }
+});
 
 /**
  * GET /admin/app/versions
@@ -167,6 +267,14 @@ app.post('/admin/app/version', requireAdmin, async (req, res) => {
       changelog: changelog ?? '',
       active: active !== false, // activa por defecto
     });
+
+    if (active !== false) {
+      try {
+        await notifyNewAppVersion(version, changelog ?? '');
+      } catch (e) {
+        logError('notifyNewAppVersion', e);
+      }
+    }
 
     log(`Nueva versión creada por admin: ${version} (code ${versionCode})`);
     return res.status(201).json({ success: true, data });

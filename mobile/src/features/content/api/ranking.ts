@@ -35,16 +35,28 @@ export function useRanking(scope: string = 'general') {
         .from('ranking_cache')
         .select('*')
         .eq('scope', scope)
-        .order('points', { ascending: false });
+        .order('points', { ascending: false })
+        .order('exact_hits', { ascending: false });
       if (error) throw error;
 
-      // Join with users to get names
-      const { data: usersData } = await supabase.from('users').select('id, nombre, apellido');
-      const userMap = new Map(usersData?.map(u => [u.id, `${u.nombre} ${u.apellido}`]) || []);
+      // Join con clientes (producción)
+      const { data: clientesData } = await supabase
+        .from('clientes')
+        .select('id, cliente_id, nombre');
+
+      const idMap = new Map<string, string>(
+        (clientesData ?? []).map((c: any) => [String(c.id), String(c.nombre)]),
+      );
+      const clienteIdMap = new Map<string, string>(
+        (clientesData ?? []).map((c: any) => [String(c.cliente_id), String(c.nombre)]),
+      );
 
       return (data || []).map((row, index) => ({
         ...mapRowToRanking(row, index),
-        userName: userMap.get(row.cliente_id) || row.cliente_id,
+        userName:
+          idMap.get(String(row.cliente_id)) ||
+          clienteIdMap.get(String(row.cliente_id)) ||
+          String(row.user_name || row.cliente_id || 'Usuario'),
       }));
     },
   });

@@ -4,9 +4,11 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { UpdateGate } from '../src/components/UpdateGate';
 import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
+import { subscribeToPasswordRecoveryLinks } from '../src/services/auth/passwordRecoveryService';
 
 const PUBLIC_AUTH_ROUTES = new Set([
   'login',
@@ -28,12 +30,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     const root = segments[0];
     const authRoute = segments[1];
+
+    if (root === '(auth)' && authRoute === 'reset-password') {
+      return;
+    }
     const inAuthGroup = root === '(auth)';
     const inAppGroup = root === '(app)';
     const inAdminGroup = root === '(admin)';
 
     if (!user && (inAppGroup || inAdminGroup)) {
-      router.replace('/(auth)/login');
+      const isResetRoute = inAuthGroup && authRoute === 'reset-password';
+      if (!isResetRoute) {
+        router.replace('/(auth)/login');
+      }
       return;
     }
 
@@ -77,14 +86,29 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+function RecoveryLinkListener() {
+  const router = useRouter();
+
+  useEffect(() => {
+    return subscribeToPasswordRecoveryLinks(() => {
+      router.replace('/(auth)/reset-password');
+    });
+  }, [router]);
+
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
+            <RecoveryLinkListener />
             <AuthGate>
-              <Slot />
+              <UpdateGate>
+                <Slot />
+              </UpdateGate>
             </AuthGate>
           </AuthProvider>
         </ThemeProvider>

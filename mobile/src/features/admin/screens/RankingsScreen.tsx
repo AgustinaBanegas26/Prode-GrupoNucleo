@@ -1,11 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { useRanking, useRankingRealtime } from '../../content/api/ranking';
+import { useScoringConfig, useUpdateScoringConfig } from '../../content/api/scoringConfig';
+import { useAuth } from '../../../providers/AuthProvider';
+import { adminApiFetch } from '../../../lib/backendApi';
 
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
@@ -29,8 +32,23 @@ export function RankingsScreen() {
   const [period, setPeriod] = useState<RankingPeriod>('general');
   const [query,  setQuery]  = useState('');
 
+  const { user } = useAuth();
   const { data: ranking = [] } = useRanking(period);
+  const { data: scoring } = useScoringConfig();
+  const updateScoring = useUpdateScoringConfig();
   useRankingRealtime();
+
+  const [exactPts, setExactPts] = useState('3');
+  const [winnerPts, setWinnerPts] = useState('1');
+  const [drawPts, setDrawPts] = useState('1');
+
+  React.useEffect(() => {
+    if (scoring) {
+      setExactPts(String(scoring.points_exact));
+      setWinnerPts(String(scoring.points_winner));
+      setDrawPts(String(scoring.points_draw));
+    }
+  }, [scoring]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -98,6 +116,60 @@ export function RankingsScreen() {
           <Text style={[s.th, { color: textMuted, textAlign: 'right' }]}>PJ</Text>
         </View>
 
+        <View style={[s.configCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[s.configTitle, { color: theme.colors.text }]}>Tabla de puntuación</Text>
+          <View style={s.configRow}>
+            <Text style={{ color: textMuted, flex: 1 }}>Resultado exacto</Text>
+            <TextInput value={exactPts} onChangeText={setExactPts} keyboardType="number-pad" style={[s.configInput, { color: theme.colors.text, borderColor: cardBorder }]} />
+          </View>
+          <View style={s.configRow}>
+            <Text style={{ color: textMuted, flex: 1 }}>Ganador correcto</Text>
+            <TextInput value={winnerPts} onChangeText={setWinnerPts} keyboardType="number-pad" style={[s.configInput, { color: theme.colors.text, borderColor: cardBorder }]} />
+          </View>
+          <View style={s.configRow}>
+            <Text style={{ color: textMuted, flex: 1 }}>Empate correcto</Text>
+            <TextInput value={drawPts} onChangeText={setDrawPts} keyboardType="number-pad" style={[s.configInput, { color: theme.colors.text, borderColor: cardBorder }]} />
+          </View>
+          <Pressable
+            onPress={async () => {
+              try {
+                await updateScoring.mutateAsync({
+                  points_exact: parseInt(exactPts, 10) || 3,
+                  points_winner: parseInt(winnerPts, 10) || 1,
+                  points_draw: parseInt(drawPts, 10) || 1,
+                });
+                Alert.alert('✓', 'Puntuación actualizada');
+              } catch (e) {
+                Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar');
+              }
+            }}
+            style={[s.recalcBtn, { backgroundColor: CELESTE_DARK }]}
+          >
+            <Text style={s.recalcText}>Guardar tabla</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              try {
+                if (user?.adminToken) {
+                  await adminApiFetch('/admin/scoring/recalculate', user.adminToken, { method: 'POST', body: '{}' });
+                } else {
+                  const { supabase } = await import('../../../lib/supabase');
+                  const { data: finished } = await supabase.from('matches').select('fixture_id').not('home_goals', 'is', null);
+                  for (const m of finished ?? []) {
+                    await supabase.rpc('calculate_match_scores', { p_fixture_id: m.fixture_id });
+                  }
+                }
+                Alert.alert('✓', 'Ranking recalculado');
+              } catch (e) {
+                Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo recalcular');
+              }
+            }}
+            style={[s.recalcBtn, { backgroundColor: DEEP_BLUE }]}
+          >
+            <Text style={s.recalcText}>Recalcular puntos</Text>
+          </Pressable>
+        </View>
+
         <View style={s.list}>
           {filtered.map((item) => {
             const medal = medalColor(item.position);
@@ -142,4 +214,10 @@ const s = StyleSheet.create({
   rowName:     { flex: 3, fontSize: 13, fontWeight: '600' },
   rowPts:      { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '800' },
   rowPj:       { flex: 1, textAlign: 'right', fontSize: 12, fontWeight: '500' },
+  configCard:  { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10, marginBottom: 8 },
+  configTitle: { fontSize: 15, fontWeight: '800' },
+  configRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  configInput: { width: 56, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'center', fontWeight: '700' },
+  recalcBtn:   { borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  recalcText:  { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

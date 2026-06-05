@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 
-import type { AppUser, StoredUser, UserRole } from '../types';
-import { deleteUser, readUsers, setUserActivo, setUserPassword, upsertUser } from '../services/usersDb';
+import type { AppUser } from '../types';
+import { deleteUser, readUsers, resetUserToInitialPassword, setUserActivo, upsertUser } from '../services/usersDb';
 
-export type UserInput = Omit<AppUser, 'createdAt' | 'updatedAt'>;
+export type UserInput = Omit<AppUser, 'createdAt' | 'ultimoAcceso'>;
 
 type UsersStore = {
   users: AppUser[];
@@ -17,9 +17,7 @@ type UsersStore = {
   resetPassword: (userId: string) => Promise<string>;
 };
 
-const stripPassword = ({ password: _password, ...rest }: StoredUser): AppUser => rest;
-
-const generatePassword = () => `${Math.floor(1000 + Math.random() * 9000)}`;
+const INITIAL_CLIENT_PASSWORD = 'clientesgn123';
 
 export const useUsersStore = create<UsersStore>((set, get) => ({
   users: [],
@@ -30,7 +28,7 @@ export const useUsersStore = create<UsersStore>((set, get) => ({
     set({ isLoading: true });
     try {
       const stored = await readUsers();
-      set({ users: stored.map(stripPassword), isHydrated: true });
+      set({ users: stored, isHydrated: true });
     } finally {
       set({ isLoading: false });
     }
@@ -48,20 +46,17 @@ export const useUsersStore = create<UsersStore>((set, get) => ({
     await get().refresh();
   },
   resetPassword: async (userId) => {
-    const next = generatePassword();
-    await setUserPassword(userId, next);
+    await resetUserToInitialPassword(userId);
     await get().refresh();
-    return next;
+    return INITIAL_CLIENT_PASSWORD;
   },
 }));
 
 export const makeEmptyUser = (): UserInput => ({
-  id: `${Date.now()}`,
-  numeroEmpleado: '',
+  id: `${Date.now()}`, // bigint-safe
+  clienteId: '',
   nombre: '',
-  apellido: '',
   email: '',
-  empresa: '',
-  rol: 'usuario' as UserRole,
   activo: true,
+  primerLogin: true,
 });

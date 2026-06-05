@@ -2,7 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import bcrypt from 'bcryptjs';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
+import { adminLogin } from '../lib/backendApi';
 import { supabase } from '../lib/supabase';
+import { registerPushToken } from '../services/pushNotifications';
 
 export interface SessionUser {
   id: string;
@@ -12,6 +14,7 @@ export interface SessionUser {
   nombre: string;
   role: 'client' | 'admin';
   mustChangePassword?: boolean;
+  adminToken?: string;
 }
 
 type LoginResult = {
@@ -62,6 +65,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
     setUser(sessionUser);
     setRole(sessionUser.role);
+
+    try {
+      if (sessionUser.role === 'client' && sessionUser.cliente_id) {
+        await registerPushToken({
+          userRole: 'client',
+          clienteId: sessionUser.cliente_id,
+        });
+      } else if (sessionUser.role === 'admin') {
+        await registerPushToken({
+          userRole: 'admin',
+          adminId: sessionUser.admin_id ?? sessionUser.id,
+        });
+      }
+    } catch (e) {
+      console.warn('[Auth] push register:', e);
+    }
   };
 
   const login = async (identifier: string, password: string): Promise<LoginResult> => {
@@ -98,8 +117,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { mustChangePassword: true, tempUser, role: 'admin' };
       }
 
+      if (admin.must_change_password) {
+        const tempUser: SessionUser = {
+          id: String(admin.id),
+          admin_id: String(admin.admin_id ?? admin.id),
+          usuario: admin.usuario,
+          nombre: admin.nombre ?? admin.usuario,
+          role: 'admin',
+          mustChangePassword: true,
+        };
+        await saveSession(tempUser);
+        return { mustChangePassword: true, tempUser, role: 'admin' };
+      }
+
       const match = await bcrypt.compare(password, admin.password_hash || '');
       if (!match) throw new Error('Contraseña incorrecta');
+
+      let adminToken: string | undefined;
+      try {
+        const jwt = await adminLogin(cleanIdentifier, password);
+        adminToken = jwt.token;
+      } catch (e) {
+        console.warn('[AUTH] admin JWT no disponible:', e);
+      }
 
       const sessionUser: SessionUser = {
         id: String(admin.id),
@@ -107,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         usuario: admin.usuario,
         nombre: admin.nombre ?? admin.usuario,
         role: 'admin',
+        adminToken,
       };
 
       await saveSession(sessionUser);
@@ -148,6 +189,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { mustChangePassword: true, tempUser, role: 'client' };
       }
 
+      if (client.must_change_password) {
+        const tempUser: SessionUser = {
+          id: String(client.id),
+          cliente_id: String(client.cliente_id),
+          nombre: client.nombre,
+          role: 'client',
+          mustChangePassword: true,
+        };
+        await saveSession(tempUser);
+        return { mustChangePassword: true, tempUser, role: 'client' };
+      }
+
       const match = await bcrypt.compare(password, client.password_hash || '');
       if (!match) throw new Error('Contraseña incorrecta');
 
@@ -155,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase
         .from('clientes')
         .update({ ultimo_acceso: new Date().toISOString() })
-        .eq('cliente_id', cleanIdentifier);
+        .eq('id', client.id);
 
       const sessionUser: SessionUser = {
         id: String(client.id),
@@ -190,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[CHANGE_PW] actualizando admins, id:', tempUser.id);
       const { data, error } = await supabase
         .from('admins')
-        .update({ password_hash: hash, primer_login: false })
+        .update({ password_hash: hash, primer_login: false, must_change_password: false })
         .eq('id', tempUser.id)
         .select();
 
@@ -204,7 +257,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .update({
           password_hash: hash,
           primer_login: false,
+          must_change_password: false,
           ultimo_acceso: new Date().toISOString(),
+          password_actualizada: true,
+          fecha_cambio_password: new Date().toISOString(),
         })
         .eq('id', tempUser.id)
         .select();
@@ -220,7 +276,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .update({
             password_hash: hash,
             primer_login: false,
+            must_change_password: false,
             ultimo_acceso: new Date().toISOString(),
+            password_actualizada: true,
+            fecha_cambio_password: new Date().toISOString(),
           })
           .eq('cliente_id', tempUser.cliente_id)
           .select();

@@ -5,6 +5,7 @@ import {
   FlatList,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -18,9 +19,12 @@ import {
   useSendNotification,
   useDeleteNotification,
   useNotificationsRealtime,
+  useNotificationSettings,
+  useUpdateNotificationSettings,
   type NotificationAudience,
   type NotificationRow,
 } from '../../content/api/notifications';
+import { useAuth } from '../../../providers/AuthProvider';
 
 const AUDIENCE_CONFIG: { key: NotificationAudience; label: string; icon: string; color: string }[] = [
   { key: 'global',     label: 'Global',    icon: 'globe', color: '#CC2627' },
@@ -40,10 +44,13 @@ const formatDate = (iso: string) =>
 export function NotificationsManagementScreen() {
   const { theme } = useAppTheme();
   const isDark = theme.isDark;
+  const { user } = useAuth();
 
   useNotificationsRealtime();
 
   const { data: notifications, isLoading } = useNotifications();
+  const { data: notifSettings } = useNotificationSettings();
+  const updateNotifSettings = useUpdateNotificationSettings();
   const sendNotification = useSendNotification();
   const deleteNotification = useDeleteNotification();
 
@@ -74,6 +81,7 @@ export function NotificationsManagementScreen() {
         audience,
         target_group: audience === 'group' ? targetGroup.trim() : undefined,
         target_user_id: audience === 'individual' ? targetUserId.trim() : undefined,
+        adminToken: user?.adminToken,
       });
       setTitle('');
       setBody('');
@@ -121,7 +129,19 @@ export function NotificationsManagementScreen() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
-            {/* Compose card */}
+            <View style={[styles.composeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, shadows.sm]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>RECORDATORIO DIARIO</Text>
+                <Switch
+                  value={notifSettings?.dailyReminderEnabled ?? true}
+                  onValueChange={(v) => updateNotifSettings.mutate(v)}
+                />
+              </View>
+              <Text style={{ fontSize: 12, color: theme.colors.muted }}>
+                Push diario a usuarios con predicciones pendientes del día
+              </Text>
+            </View>
+
             <View style={[styles.composeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, shadows.md]}>
               <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>NUEVA NOTIFICACIÓN</Text>
 

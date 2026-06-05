@@ -9,6 +9,7 @@
 
 const { startServer } = require('./server');
 const { startSyncCron } = require('./services/matchSync');
+const { startNotificationJobs } = require('./services/notificationJobs');
 
 function nowIso() {
   return new Date().toISOString();
@@ -25,9 +26,13 @@ startServer();
 try {
   startSyncCron();
 } catch (e) {
-  // Si API_FOOTBALL_KEY no está configurada, el cron no arranca
-  // pero el servidor HTTP sigue funcionando
-  console.warn(`[index] ${nowIso()} — Cron no iniciado: ${e.message}`);
+  console.warn(`[index] ${nowIso()} — matchSync cron no iniciado: ${e.message}`);
+}
+
+try {
+  startNotificationJobs();
+} catch (e) {
+  console.warn(`[index] ${nowIso()} — notification jobs no iniciados: ${e.message}`);
 }
 
 log('Sistema iniciado');

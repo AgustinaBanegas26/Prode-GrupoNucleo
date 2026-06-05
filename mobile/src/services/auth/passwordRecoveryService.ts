@@ -24,7 +24,7 @@ export class PasswordRecoveryError extends Error {
 function getPasswordResetRedirectUrl(): string {
   const configured = process.env.EXPO_PUBLIC_PASSWORD_RESET_REDIRECT_URL?.trim();
   if (configured) return configured;
-  return Linking.createURL('reset-password');
+  return 'prode-grupo-nucleo://reset-password';
 }
 
 async function ensureAuthUserExists(email: string): Promise<void> {
@@ -287,6 +287,8 @@ async function syncPasswordHashToLegacyTables(
         primer_login: false,
         must_change_password: false,
         ultimo_acceso: new Date().toISOString(),
+        password_actualizada: true,
+        fecha_cambio_password: new Date().toISOString(),
       })
       .eq('id', client.id);
   }

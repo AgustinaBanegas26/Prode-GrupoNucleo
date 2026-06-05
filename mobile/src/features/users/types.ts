@@ -1,16 +1,18 @@
-export type UserRole = 'admin' | 'usuario';
-
 export type AppUser = {
+  /** bigint en DB (se maneja como string en UI para evitar problemas) */
   id: string;
-  numeroEmpleado: string;
+  /** clientes.cliente_id */
+  clienteId: string;
+  /** clientes.nombre */
   nombre: string;
-  apellido: string;
-  email?: string;
-  empresa?: string;
-  rol: UserRole;
+  /** clientes.email (opcional, requerido para recovery) */
+  email?: string | null;
+  /** clientes.habilitado */
   activo: boolean;
-  createdAt: number;
-  updatedAt: number;
+  /** clientes.primer_login */
+  primerLogin: boolean;
+  /** clientes.ultimo_acceso */
+  ultimoAcceso?: number | null;
+  /** clientes.created_at */
+  createdAt?: number | null;
 };
-
-export type StoredUser = AppUser & { password?: string };

@@ -94,18 +94,18 @@ export function ReportsScreen() {
 
     if (kind === 'Usuarios') {
       const rows: string[][] = [
-        ['id', 'numeroEmpleado', 'nombre', 'apellido', 'rol', 'activo', 'actualizado'],
+        ['id', 'cliente_id', 'nombre', 'email', 'habilitado', 'primer_login', 'ultimo_acceso'],
         ...users
           .slice()
-          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
           .map((u) => [
             u.id,
-            u.numeroEmpleado,
+            u.clienteId,
             u.nombre,
-            u.apellido,
-            u.rol,
+            u.email ?? '',
             u.activo ? 'true' : 'false',
-            new Date(u.updatedAt).toLocaleString(),
+            u.primerLogin ? 'true' : 'false',
+            u.ultimoAcceso ? new Date(u.ultimoAcceso).toLocaleString() : '',
           ]),
       ];
 

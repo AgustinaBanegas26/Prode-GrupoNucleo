@@ -20,6 +20,7 @@ import type { AppUser } from "../../users/types";
 import { makeEmptyUser, useUsersStore } from "../../users/store/usersStore";
 import type { UserInput } from "../../users/store/usersStore";
 import { useAdminActivityStore } from "../store/adminActivityStore";
+import { useRanking } from "../../content/api/ranking";
 
 const CELESTE = "#6EC6FF";
 const CELESTE_DARK = "#3DA5F5";
@@ -65,6 +66,9 @@ function UserCard({
   onToggleActive,
   onEdit,
   onDelete,
+  onResetPassword,
+  rankPosition,
+  rankPoints,
 }: {
   user: AppUser;
   theme: any;
@@ -72,6 +76,9 @@ function UserCard({
   onToggleActive: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onResetPassword: () => void;
+  rankPosition?: number;
+  rankPoints?: number;
 }) {
   return (
     <View
@@ -89,13 +96,13 @@ function UserCard({
       <View style={us.avatar}>
         <Text
           style={us.avatarText}
-        >{`${user.nombre.charAt(0)}${user.apellido.charAt(0)}`}</Text>
+        >{`${(user.nombre || 'C').charAt(0)}`}</Text>
       </View>
 
       <View style={us.body}>
         <Text
           style={[us.name, { color: theme.colors.text }]}
-        >{`${user.nombre} ${user.apellido}`}</Text>
+        >{`${user.nombre}`}</Text>
         <Text style={[us.email, { color: theme.colors.muted }]}>
           {user.email || "Sin email"}
         </Text>
@@ -111,11 +118,11 @@ function UserCard({
               { color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)" },
             ]}
           >
-            {user.empresa || "Sin empresa"}
+            Cliente ID: {user.clienteId}
           </Text>
           <View style={us.dot} />
           <MaterialCommunityIcons
-            name="numeric"
+            name="key"
             size={12}
             color={isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)"}
           />
@@ -125,8 +132,17 @@ function UserCard({
               { color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)" },
             ]}
           >
-            {user.numeroEmpleado}
+            {user.primerLogin ? "Primer login" : "Activo"}
           </Text>
+          {rankPoints != null ? (
+            <>
+              <View style={us.dot} />
+              <MaterialCommunityIcons name="trophy" size={12} color={CELESTE_DARK} />
+              <Text style={[us.meta, { color: CELESTE_DARK }]}>
+                #{rankPosition ?? "—"} · {rankPoints} pts
+              </Text>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -160,6 +176,12 @@ function UserCard({
             size={16}
             color={CELESTE_DARK}
           />
+        </Pressable>
+        <Pressable
+          onPress={onResetPassword}
+          style={[us.iconBtn, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}
+        >
+          <MaterialCommunityIcons name="lock-reset" size={16} color="#F59E0B" />
         </Pressable>
         <Pressable
           onPress={onDelete}
@@ -225,7 +247,17 @@ export function UsersManagementScreen() {
   const setActivo = useUsersStore((s) => s.setActivo);
   const upsert = useUsersStore((s) => s.upsert);
   const remove = useUsersStore((s) => s.remove);
+  const resetPassword = useUsersStore((s) => s.resetPassword);
   const log = useAdminActivityStore((s) => s.log);
+  const { data: ranking = [] } = useRanking("general");
+
+  const rankingByCliente = useMemo(() => {
+    const map = new Map<string, { position: number; points: number }>();
+    ranking.forEach((r, i) => {
+      map.set(String(r.clienteId), { position: i + 1, points: r.points });
+    });
+    return map;
+  }, [ranking]);
 
   useEffect(() => {
     refreshUsers();
@@ -245,10 +277,9 @@ export function UsersManagementScreen() {
       arr = arr.filter(
         (u) =>
           u.nombre.toLowerCase().includes(q) ||
-          u.apellido.toLowerCase().includes(q) ||
           (u.email && u.email.toLowerCase().includes(q)) ||
-          (u.empresa && u.empresa.toLowerCase().includes(q)) ||
-          u.numeroEmpleado.includes(q),
+          u.clienteId.toLowerCase().includes(q) ||
+          u.id.toLowerCase().includes(q),
       );
     }
     if (statusFilter === "active") arr = arr.filter((u) => u.activo);
@@ -263,7 +294,7 @@ export function UsersManagementScreen() {
         action: "toggle",
         module: "users",
         title: "Usuario " + (!user.activo ? "activado" : "desactivado"),
-        detail: `${user.nombre} ${user.apellido}`,
+        detail: `${user.nombre} · ${user.clienteId}`,
       });
     } catch (e) {
       Alert.alert("Error", "No se pudo actualizar el estado del usuario");
@@ -291,10 +322,38 @@ export function UsersManagementScreen() {
                 action: "delete",
                 module: "users",
                 title: "Usuario eliminado",
-                detail: `${user.nombre} ${user.apellido}`,
+                detail: `${user.nombre} · ${user.clienteId}`,
               });
             } catch (e) {
               Alert.alert("Error", "No se pudo eliminar el usuario");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleResetPassword = async (user: AppUser) => {
+    Alert.alert(
+      "Resetear contraseña",
+      `Esto deja al usuario en "primer login". Contraseña inicial: clientesgn123\n\nCliente: ${user.clienteId}`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Resetear",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await resetPassword(user.id);
+              log({
+                action: "update",
+                module: "users",
+                title: "Contraseña reseteada",
+                detail: `Cliente ID: ${user.clienteId}`,
+              });
+              Alert.alert("OK", "Contraseña reseteada. El usuario debe ingresar con: clientesgn123");
+            } catch (e) {
+              Alert.alert("Error", "No se pudo resetear la contraseña");
             }
           },
         },
@@ -466,9 +525,12 @@ export function UsersManagementScreen() {
                   user={user}
                   theme={theme}
                   isDark={isDark}
+                  rankPosition={rankingByCliente.get(String(user.clienteId))?.position}
+                  rankPoints={rankingByCliente.get(String(user.clienteId))?.points}
                   onToggleActive={() => handleToggleActive(user)}
                   onEdit={() => handleEdit(user)}
                   onDelete={() => handleDelete(user)}
+                  onResetPassword={() => handleResetPassword(user)}
                 />
               </FadeSlide>
             ))
@@ -488,7 +550,7 @@ export function UsersManagementScreen() {
             action: editingUser ? "update" : "create",
             module: "users",
             title: editingUser ? "Usuario actualizado" : "Usuario creado",
-            detail: `${u.nombre} ${u.apellido}`,
+          detail: `${u.nombre} · ${u.clienteId}`,
           });
           setModalVisible(false);
         }}
@@ -521,12 +583,8 @@ function UserModal({
   }, [visible, user]);
 
   const handleSave = async () => {
-    if (
-      !form.nombre.trim() ||
-      !form.apellido.trim() ||
-      !form.numeroEmpleado.trim()
-    ) {
-      Alert.alert("Error", "Completá nombre, apellido y número de empleado");
+    if (!form.nombre.trim() || !form.clienteId.trim()) {
+      Alert.alert("Error", "Completá nombre y cliente_id");
       return;
     }
     await onSave(form);
@@ -565,54 +623,25 @@ function UserModal({
           </View>
 
           <ScrollView style={m.body}>
-            <View style={m.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={[m.label, { color: theme.colors.text }]}>
-                  Nombre
-                </Text>
-                <TextInput
-                  style={[
-                    m.input,
-                    {
-                      color: theme.colors.text,
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "#F5F7FA",
-                      borderColor: isDark
-                        ? "rgba(110,198,255,0.15)"
-                        : "rgba(110,198,255,0.25)",
-                    },
-                  ]}
-                  value={form.nombre}
-                  onChangeText={(text) => setForm({ ...form, nombre: text })}
-                />
-              </View>
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={[m.label, { color: theme.colors.text }]}>
-                  Apellido
-                </Text>
-                <TextInput
-                  style={[
-                    m.input,
-                    {
-                      color: theme.colors.text,
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.05)"
-                        : "#F5F7FA",
-                      borderColor: isDark
-                        ? "rgba(110,198,255,0.15)"
-                        : "rgba(110,198,255,0.25)",
-                    },
-                  ]}
-                  value={form.apellido}
-                  onChangeText={(text) => setForm({ ...form, apellido: text })}
-                />
-              </View>
+            <View style={m.field}>
+              <Text style={[m.label, { color: theme.colors.text }]}>Nombre</Text>
+              <TextInput
+                style={[
+                  m.input,
+                  {
+                    color: theme.colors.text,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#F5F7FA",
+                    borderColor: isDark ? "rgba(110,198,255,0.15)" : "rgba(110,198,255,0.25)",
+                  },
+                ]}
+                value={form.nombre}
+                onChangeText={(text) => setForm({ ...form, nombre: text })}
+              />
             </View>
 
             <View style={m.field}>
               <Text style={[m.label, { color: theme.colors.text }]}>
-                Número de empleado
+                Cliente ID
               </Text>
               <TextInput
                 style={[
@@ -627,9 +656,9 @@ function UserModal({
                       : "rgba(110,198,255,0.25)",
                   },
                 ]}
-                value={form.numeroEmpleado}
+                value={form.clienteId}
                 onChangeText={(text) =>
-                  setForm({ ...form, numeroEmpleado: text })
+                  setForm({ ...form, clienteId: text })
                 }
               />
             </View>
@@ -652,28 +681,6 @@ function UserModal({
                 value={form.email || ""}
                 onChangeText={(text) => setForm({ ...form, email: text })}
                 keyboardType="email-address"
-              />
-            </View>
-
-            <View style={m.field}>
-              <Text style={[m.label, { color: theme.colors.text }]}>
-                Empresa
-              </Text>
-              <TextInput
-                style={[
-                  m.input,
-                  {
-                    color: theme.colors.text,
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.05)"
-                      : "#F5F7FA",
-                    borderColor: isDark
-                      ? "rgba(110,198,255,0.15)"
-                      : "rgba(110,198,255,0.25)",
-                  },
-                ]}
-                value={form.empresa || ""}
-                onChangeText={(text) => setForm({ ...form, empresa: text })}
               />
             </View>
 

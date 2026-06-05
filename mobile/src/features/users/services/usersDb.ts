@@ -1,76 +1,65 @@
 import { supabase } from '../../../lib/supabase';
-import type { AppUser, UserRole } from '../types';
+import type { AppUser } from '../types';
 
-type StoredUser = AppUser & {
-  password?: string;
-};
-
-const normalizeEmployeeNumber = (n: string) => n.trim();
+const normalizeClienteId = (n: string) => n.trim();
+const normalizeNombre = (n: string) => n.trim();
+const normalizeEmail = (e: string | null | undefined) => (typeof e === 'string' ? e.trim().toLowerCase() : null);
 
 function mapRowToUser(row: any): AppUser {
   return {
-    id: row.id,
-    numeroEmpleado: row.numero_empleado,
+    id: String(row.id),
+    clienteId: String(row.cliente_id),
     nombre: row.nombre,
-    apellido: row.apellido,
-    email: row.email,
-    empresa: row.empresa,
-    rol: row.rol as UserRole,
-    activo: row.activo,
-    createdAt: new Date(row.created_at).getTime(),
-    updatedAt: new Date(row.updated_at).getTime(),
+    email: row.email ?? null,
+    activo: !!row.habilitado,
+    primerLogin: !!row.primer_login,
+    ultimoAcceso: row.ultimo_acceso ? new Date(row.ultimo_acceso).getTime() : null,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
   };
 }
 
 export async function readUsers(): Promise<AppUser[]> {
   const { data, error } = await supabase
-    .from('users')
+    .from('clientes')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []).map(mapRowToUser);
 }
 
-export async function getUserByNumeroEmpleado(numeroEmpleado: string): Promise<AppUser | null> {
-  const normalized = normalizeEmployeeNumber(numeroEmpleado);
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('numero_empleado', normalized)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? mapRowToUser(data) : null;
-}
-
 export async function upsertUser(
-  input: Omit<AppUser, 'createdAt' | 'updatedAt'>,
+  input: Omit<AppUser, 'createdAt' | 'ultimoAcceso'>,
 ): Promise<AppUser> {
-  const normalizedNumeroEmpleado = normalizeEmployeeNumber(input.numeroEmpleado);
-  
-  // Check if numero_empleado is already taken by another user
+  const id = String(input.id);
+  const normalizedClienteId = normalizeClienteId(input.clienteId);
+  const normalizedNombre = normalizeNombre(input.nombre);
+  const normalizedEmail = normalizeEmail(input.email);
+
+  if (!normalizedClienteId) throw new Error('clienteId es requerido');
+  if (!normalizedNombre) throw new Error('nombre es requerido');
+
+  // Check duplicado cliente_id en otro registro
   const { data: existing, error: checkError } = await supabase
-    .from('users')
+    .from('clientes')
     .select('id')
-    .eq('numero_empleado', normalizedNumeroEmpleado)
-    .neq('id', input.id)
+    .eq('cliente_id', normalizedClienteId)
+    .neq('id', id)
     .maybeSingle();
-  
   if (checkError) throw checkError;
-  if (existing) {
-    throw new Error('Ya existe un usuario con ese número de empleado.');
+  if (existing?.id != null) {
+    throw new Error('Ya existe un usuario con ese cliente_id.');
   }
 
   const { data, error } = await supabase
-    .from('users')
+    .from('clientes')
     .upsert({
-      id: input.id,
-      numero_empleado: normalizedNumeroEmpleado,
-      nombre: input.nombre,
-      apellido: input.apellido,
-      email: input.email,
-      empresa: input.empresa,
-      rol: input.rol,
-      activo: input.activo,
+      id: Number(id),
+      cliente_id: normalizedClienteId,
+      nombre: normalizedNombre,
+      email: normalizedEmail,
+      habilitado: !!input.activo,
+      // No tocamos password_hash aquí.
+      // No tocamos primer_login aquí (se gestiona por reset/password recovery).
     }, { onConflict: 'id' })
     .select()
     .single();
@@ -81,24 +70,33 @@ export async function upsertUser(
 
 export async function deleteUser(userId: string): Promise<void> {
   const { error } = await supabase
-    .from('users')
+    .from('clientes')
     .delete()
-    .eq('id', userId);
+    .eq('id', Number(userId));
   if (error) throw error;
 }
 
-export async function setUserPassword(userId: string, password: string): Promise<void> {
-  // For now, we'll handle password differently since we don't store it in the same table
-  // We could add a separate passwords table or use Supabase Auth later
-  // For this version, we'll just log it
-  console.log(`Setting password for user ${userId} to ${password}`);
+export async function resetUserToInitialPassword(userId: string): Promise<void> {
+  // La app legacy usa contraseña inicial fija para clientes en primer ingreso.
+  // Al resetear, se vuelve a "primer_login" y se borra el hash.
+  const { error } = await supabase
+    .from('clientes')
+    .update({
+      password_hash: null,
+      primer_login: true,
+      password_actualizada: false,
+      fecha_cambio_password: null,
+      must_change_password: true,
+    })
+    .eq('id', Number(userId));
+  if (error) throw error;
 }
 
 export async function setUserActivo(userId: string, activo: boolean): Promise<void> {
   const { error } = await supabase
-    .from('users')
-    .update({ activo })
-    .eq('id', userId);
+    .from('clientes')
+    .update({ habilitado: !!activo })
+    .eq('id', Number(userId));
   if (error) throw error;
 }
 

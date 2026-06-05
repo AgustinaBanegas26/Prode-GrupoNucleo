@@ -7,5 +7,12 @@
  */
 
 const { startSyncCron } = require('../services/matchSync');
+const { startNotificationJobs } = require('../services/notificationJobs');
 
 startSyncCron();
+
+try {
+  startNotificationJobs();
+} catch (e) {
+  console.warn('[startJobs] notification jobs:', e.message);
+}

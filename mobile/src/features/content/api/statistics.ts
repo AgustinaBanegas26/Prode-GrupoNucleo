@@ -18,15 +18,15 @@ export function useStatistics() {
     queryFn: async (): Promise<StatisticsData> => {
       // Get total users
       const { count: totalUsers, error: usersError } = await supabase
-        .from('users')
+        .from('clientes')
         .select('*', { count: 'exact', head: true });
       if (usersError) throw usersError;
 
       // Get active users
       const { count: activeUsers, error: activeError } = await supabase
-        .from('users')
+        .from('clientes')
         .select('*', { count: 'exact', head: true })
-        .eq('activo', true);
+        .eq('habilitado', true);
       if (activeError) throw activeError;
 
       // Get total predictions
@@ -63,7 +63,7 @@ export function useStatisticsRealtime() {
   useEffect(() => {
     const channel = supabase
       .channel('statistics-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => {
         queryClient.invalidateQueries({ queryKey: statisticsQueryKey });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions' }, () => {

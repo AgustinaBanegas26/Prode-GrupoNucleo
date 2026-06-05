@@ -17,7 +17,11 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { Screen } from '../../src/components/Screen';
-import { profileStats, homePosition, getUpcomingMatches } from '../../src/features/mockData';
+import { getUpcomingMatches } from '../../src/features/mockData';
+import { useRanking } from '../../src/features/content/api/ranking';
+import { useUserScores, resultTypeLabel } from '../../src/features/content/api/scores';
+import { useMatches } from '../../src/features/content/api/matches';
+import { toMatchItemFromDb } from '../../src/features/matchesAdapter';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
@@ -105,7 +109,24 @@ export default function ProfileScreen() {
     ? `Administrador · ${user.admin_id ?? ''}`
     : `Cliente #${user?.cliente_id ?? ''}`;
   const bg = theme.isDark ? '#0D0D0D' : '#F5F7FA';
-  const nextMatch = getUpcomingMatches(1)[0];
+  const clienteId = user?.cliente_id ?? '';
+  const { data: ranking = [] } = useRanking('general');
+  const { data: myScores = [] } = useUserScores(clienteId);
+  const { data: matchesRaw } = useMatches();
+
+  const myRank = ranking.find((r) => String(r.clienteId) === String(clienteId));
+  const totalPoints = myRank?.points ?? 0;
+  const exactHits = myScores.filter((s) => s.result_type === 'exact').length;
+  const played = myScores.length;
+  const efectividad = played > 0 ? `${Math.round((myScores.filter((s) => s.points_earned > 0).length / played) * 100)}%` : '0%';
+
+  const nextMatchFromDb = (matchesRaw ?? [])
+    .map(toMatchItemFromDb)
+    .find((m) => {
+      const row = matchesRaw?.find((r) => String(r.fixture_id) === m.id);
+      return row && !['FT', 'AET', 'PEN'].includes(row.status ?? '') && new Date(row.match_date) > new Date();
+    });
+  const nextMatch = nextMatchFromDb ?? getUpcomingMatches(1)[0];
 
   // ── Selector de foto ──────────────────────────────────────
   const pickImage = async () => {
@@ -209,7 +230,7 @@ export default function ProfileScreen() {
 
             <View style={hdrS.rankBadge}>
               <Text style={hdrS.rankEmoji}>🏆</Text>
-              <Text style={hdrS.rankText}>#{homePosition.position} del Ranking General</Text>
+              <Text style={hdrS.rankText}>#{myRank?.position ?? '—'} del Ranking General</Text>
             </View>
           </View>
         </View>
@@ -327,11 +348,38 @@ export default function ProfileScreen() {
           <FadeSlide delay={120}>
             <Text style={[secS.title, { color: theme.colors.text }]}>Mis estadísticas</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-              <StatCard icon="🏆" label="Puntos"      value={profileStats.points}      />
-              <StatCard icon="🎯" label="Aciertos"    value={profileStats.aciertos}    />
-              <StatCard icon="📈" label="Efectividad" value={profileStats.efectividad} />
+              <StatCard icon="🏆" label="Puntos"      value={totalPoints}      />
+              <StatCard icon="🎯" label="Exactos"   value={exactHits}        />
+              <StatCard icon="📈" label="Efectividad" value={efectividad}      />
             </View>
           </FadeSlide>
+
+          {myScores.length > 0 ? (
+            <FadeSlide delay={150}>
+              <Text style={[secS.title, { color: theme.colors.text }]}>Historial por partido</Text>
+              <View style={{ gap: 8, marginTop: 10 }}>
+                {myScores.slice(0, 8).map((s) => (
+                  <View
+                    key={s.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: theme.isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)',
+                      backgroundColor: theme.isDark ? '#171717' : '#fff',
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
+                      Partido #{s.match_id} — {s.points_earned} pts
+                    </Text>
+                    <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 4 }}>
+                      {resultTypeLabel(s.result_type)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </FadeSlide>
+          ) : null}
 
           {/* ══════════════════════════════════════════════════
               PRÓXIMO PARTIDO

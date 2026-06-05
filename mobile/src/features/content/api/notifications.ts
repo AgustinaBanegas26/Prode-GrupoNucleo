@@ -2,8 +2,7 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../../../lib/supabase';
-
-// ── Tipos ─────────────────────────────────────────────────────
+import { adminApiFetch } from '../../../lib/backendApi';
 
 export type NotificationAudience = 'global' | 'group' | 'individual';
 
@@ -24,13 +23,10 @@ export type SendNotificationInput = {
   audience: NotificationAudience;
   target_group?: string;
   target_user_id?: string;
+  adminToken?: string;
 };
 
-// ── Query key ─────────────────────────────────────────────────
-
 export const notificationsQueryKey = ['notifications'] as const;
-
-// ── Hooks ─────────────────────────────────────────────────────
 
 export function useNotifications() {
   return useQuery({
@@ -46,7 +42,6 @@ export function useNotifications() {
   });
 }
 
-/** Realtime */
 export function useNotificationsRealtime() {
   const qc = useQueryClient();
 
@@ -70,13 +65,37 @@ export function useSendNotification() {
   return useMutation({
     mutationFn: async (input: SendNotificationInput) => {
       const now = new Date().toISOString();
-      const { error } = await supabase.from('notifications').insert({
+
+      if (input.adminToken) {
+        await adminApiFetch('/admin/notifications/send', input.adminToken, {
+          method: 'POST',
+          body: JSON.stringify({
+            title: input.title,
+            body: input.body,
+            audience: input.audience,
+            target_user_id: input.target_user_id,
+          }),
+        });
+        return;
+      }
+
+      await supabase.from('notifications').insert({
         title: input.title,
         body: input.body,
         audience: input.audience,
         target_group: input.target_group ?? null,
         target_user_id: input.target_user_id ?? null,
         sent_at: now,
+      });
+
+      const { error } = await supabase.from('notifications_outbox').insert({
+        event_type: 'manual',
+        title: input.title,
+        body: input.body,
+        audience: input.audience,
+        target_group: input.target_group ?? null,
+        target_user_id: input.target_user_id ?? null,
+        status: 'pending',
       });
       if (error) throw new Error(error.message);
     },
@@ -93,5 +112,37 @@ export function useDeleteNotification() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: notificationsQueryKey }),
+  });
+}
+
+export function useNotificationSettings() {
+  return useQuery({
+    queryKey: ['notification_settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notification_settings')
+        .select('daily_reminder_enabled')
+        .eq('id', 1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return { dailyReminderEnabled: data?.daily_reminder_enabled ?? true };
+    },
+  });
+}
+
+export function useUpdateNotificationSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dailyReminderEnabled: boolean) => {
+      const { error } = await supabase
+        .from('notification_settings')
+        .update({
+          daily_reminder_enabled: dailyReminderEnabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', 1);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notification_settings'] }),
   });
 }
