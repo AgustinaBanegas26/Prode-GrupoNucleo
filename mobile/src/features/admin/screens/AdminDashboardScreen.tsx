@@ -33,8 +33,6 @@ type MenuOption = {
 
 const MENU_OPTIONS: MenuOption[] = [
   { id: '1', icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
-  { id: '10', icon: 'soccer',          label: 'Partidos',          description: 'Resultados y estados de partidos',   route: '/(admin)/matches'        },
-  { id: '11', icon: 'newspaper',       label: 'Novedades',         description: 'Noticias publicadas en la app',      route: '/(admin)/news'           },
   { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
   { id: '12', icon: 'bell',            label: 'Notificaciones',    description: 'Push manual e historial',            route: '/(admin)/notifications'  },
   { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'       },

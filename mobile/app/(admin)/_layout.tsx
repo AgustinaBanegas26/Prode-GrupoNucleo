@@ -29,8 +29,6 @@ export default function AdminLayout() {
       <Stack.Screen name="voted-matches" />
       <Stack.Screen name="user-activity" />
       <Stack.Screen name="notifications" />
-      <Stack.Screen name="matches" />
-      <Stack.Screen name="news" />
       <Stack.Screen name="slider" />
       <Stack.Screen name="rewards" />
       <Stack.Screen name="images" />
