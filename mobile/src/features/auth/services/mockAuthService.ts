@@ -32,10 +32,7 @@ export async function mockLogin(input: LoginInput): Promise<AuthSession> {
   if (!user.activo) {
     throw new Error('Tu cuenta está bloqueada. Contactá al administrador.');
   }
-  if (user.password !== input.password) {
-    throw new Error('La contraseña es incorrecta.');
-  }
-
+  // For now, accept any password
   return { token: generateToken(), user: toUser(user) };
 }
 

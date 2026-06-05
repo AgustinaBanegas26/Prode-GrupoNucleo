@@ -5,6 +5,54 @@
 -- Nota RLS: policies permisivas para que funcione con anon key y login legacy.
 
 -- =====================================================================
+-- 000) USERS
+-- =====================================================================
+create table if not exists public.users (
+  id text primary key,
+  numero_empleado text not null unique,
+  nombre text not null,
+  apellido text not null,
+  email text,
+  empresa text,
+  rol text not null check (rol in ('usuario', 'admin')) default 'usuario',
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists users_numero_empleado_idx on public.users(numero_empleado);
+create index if not exists users_activo_idx on public.users(activo);
+create index if not exists users_rol_idx on public.users(rol);
+
+drop trigger if exists trg_users_updated_at on public.users;
+create trigger trg_users_updated_at
+before update on public.users
+for each row execute function public.set_updated_at();
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'users'
+  ) then
+    alter publication supabase_realtime add table public.users;
+  end if;
+end $$;
+
+alter table public.users enable row level security;
+drop policy if exists "users_select_all" on public.users;
+create policy "users_select_all" on public.users for select to public using (true);
+drop policy if exists "users_insert_all" on public.users;
+create policy "users_insert_all" on public.users for insert to public with check (true);
+drop policy if exists "users_update_all" on public.users;
+create policy "users_update_all" on public.users for update to public using (true) with check (true);
+drop policy if exists "users_delete_all" on public.users;
+create policy "users_delete_all" on public.users for delete to public using (true);
+
+-- =====================================================================
 -- 001) MATCHES
 -- =====================================================================
 -- Matches (fixture/resultados) + índices + Realtime

@@ -60,6 +60,8 @@ export const makeEmptyUser = (): UserInput => ({
   numeroEmpleado: '',
   nombre: '',
   apellido: '',
+  email: '',
+  empresa: '',
   rol: 'usuario' as UserRole,
   activo: true,
 });

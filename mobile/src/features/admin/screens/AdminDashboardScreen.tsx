@@ -1,19 +1,32 @@
+<<<<<<< HEAD
 import React, { useEffect, useMemo } from 'react';
 import { View, ScrollView, Text, StyleSheet, Pressable } from 'react-native';
+=======
+import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  Animated,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+>>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { spacing, radius, shadows, typography } from '../../../theme/theme';
 import { predictions } from '../../mockData';
-import { useNewsStore } from '../../content/store/newsStore';
-import { useImageAssetsStore } from '../../content/store/imageAssetsStore';
-import { useRewardsStore } from '../../content/store/rewardsStore';
-import { useSliderRealtime, useSliderSlides } from '../../content/api/sliderSlides';
 import { useUsersStore } from '../../users/store/usersStore';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 import { useAuth } from '../../../providers/AuthProvider';
+
+// ── Paleta idéntica a la app usuario ───────────────────────────
+const CELESTE      = '#6EC6FF';
+const CELESTE_DARK = '#3DA5F5';
+const DEEP_BLUE    = '#0F4C81';
+const RED          = '#CC2627';
 
 type MenuOption = {
   id: string;
@@ -21,185 +34,48 @@ type MenuOption = {
   label: string;
   description: string;
   route: string;
-  color: 'primary' | 'success' | 'warning' | 'error' | 'info';
 };
 
 const MENU_OPTIONS: MenuOption[] = [
-  {
-    id: '13',
-    icon: 'soccer',
-    label: 'Gestión de Partidos',
-    description: 'Crear, editar y cargar resultados',
-    route: '/(admin)/matches',
-    color: 'primary',
-  },
-  {
-    id: '1',
-    icon: 'account-multiple',
-    label: 'Usuarios',
-    description: 'Administra usuarios registrados',
-    route: '/(admin)/users',
-    color: 'primary',
-  },
-  {
-    id: '14',
-    icon: 'bell-ring',
-    label: 'Notificaciones Push',
-    description: 'Enviar globales, por grupo o individuales',
-    route: '/(admin)/notifications',
-    color: 'info',
-  },
-  {
-    id: '11',
-    icon: 'newspaper-variant',
-    label: 'Noticias',
-    description: 'Publicar y editar noticias',
-    route: '/(admin)/news',
-    color: 'success',
-  },
-  {
-    id: '4',
-    icon: 'trophy',
-    label: 'Rankings',
-    description: 'Consulta de clasificaciones',
-    route: '/(admin)/rankings',
-    color: 'primary',
-  },
-  {
-    id: '2',
-    icon: 'chart-line',
-    label: 'Estadísticas',
-    description: 'Visualiza datos y métricas',
-    route: '/(admin)/statistics',
-    color: 'info',
-  },
-  {
-    id: '3',
-    icon: 'gift-outline',
-    label: 'Premios',
-    description: 'Control de premios y recompensas',
-    route: '/(admin)/rewards',
-    color: 'warning',
-  },
-  {
-    id: '10',
-    icon: 'view-carousel',
-    label: 'Slider / Banners',
-    description: 'Slides, botones y orden',
-    route: '/(admin)/slider',
-    color: 'info',
-  },
-  {
-    id: '9',
-    icon: 'image-multiple',
-    label: 'Imágenes',
-    description: 'Slider, ads y banners',
-    route: '/(admin)/images',
-    color: 'primary',
-  },
-  {
-    id: '5',
-    icon: 'file-export',
-    label: 'Reportes',
-    description: 'Genera reportes en PDF/Excel',
-    route: '/(admin)/reports',
-    color: 'success',
-  },
-  {
-    id: '6',
-    icon: 'chart-box',
-    label: 'Participación',
-    description: 'Seguimiento de participación',
-    route: '/(admin)/participation',
-    color: 'warning',
-  },
-  {
-    id: '12',
-    icon: 'cog',
-    label: 'Configuración',
-    description: 'Logo, colores y textos',
-    route: '/(admin)/settings',
-    color: 'warning',
-  },
+  { id: '1', icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
+  { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Clasificaciones generales',          route: '/(admin)/rankings'       },
+  { id: '2', icon: 'chart-line',       label: 'Estadísticas',      description: 'Datos y métricas en tiempo real',    route: '/(admin)/statistics'     },
+  { id: '6', icon: 'chart-box',        label: 'Participación',     description: 'Seguimiento de participación',       route: '/(admin)/participation'  },
+  { id: '7', icon: 'soccer',           label: 'Partidos Votados',  description: 'Partidos con más pronósticos',        route: '/(admin)/voted-matches'  },
+  { id: '8', icon: 'history',          label: 'Actividad',         description: 'Registro de eventos del admin',       route: '/(admin)/user-activity'  },
+  { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
 ];
+
+function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity,    { toValue: 1, duration: 380, delay, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 380, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+}
 
 export function AdminDashboardScreen() {
   const { theme } = useAppTheme();
-  const router = useRouter();
+  const isDark    = theme.isDark;
+  const router    = useRouter();
   const { logout } = useAuth();
-  const log = useAdminActivityStore((s) => s.log);
-
-  const users = useUsersStore((s) => s.users);
+  const log        = useAdminActivityStore((s) => s.log);
+  const users      = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
 
-  const rewards = useRewardsStore((s) => s.rewards);
-  const news = useNewsStore((s) => s.items);
-  const images = useImageAssetsStore((s) => s.assets);
-  const { data: slides = [] } = useSliderSlides();
-  useSliderRealtime();
-
-  useEffect(() => {
-    refreshUsers();
-  }, [refreshUsers]);
+  useEffect(() => { refreshUsers(); }, [refreshUsers]);
 
   const stats = useMemo(() => {
-    const totalUsers = users.length;
+    const totalUsers  = users.length;
     const activeUsers = users.filter((u) => u.activo).length;
     const predictionsCount = predictions.length;
-    const rewardsCount = rewards.length;
-    const publishedNews = news.filter((n) => n.status === 'published').length;
-    const imagesCount = images.length;
-    const activeSlides = slides.filter((s) => s.active).length;
-
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
-
-    return {
-      totalUsers,
-      activeUsers,
-      predictionsCount,
-      rewardsCount,
-      publishedNews,
-      imagesCount,
-      activeSlides,
-      participationPct,
-    };
-  }, [images.length, news, rewards.length, slides, users]);
-
-  type ChartPoint = { label: string; value: number };
-
-  const chart = useMemo(() => {
-    const today = new Date();
-    const points: ChartPoint[] = [];
-
-    for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const start = d.getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-
-      const count = news.filter((n) => n.status === 'published' && n.date >= start && n.date < end).length;
-      const label = d.toLocaleDateString(undefined, { weekday: 'short' });
-      points.push({ label, value: count });
-    }
-
-    return points;
-  }, [news]);
-
-  const getColorValue = (color: MenuOption['color']) => {
-    switch (color) {
-      case 'primary':
-        return theme.colors.primary;
-      case 'success':
-        return theme.colors.success;
-      case 'warning':
-        return theme.colors.warning;
-      case 'error':
-        return theme.colors.error;
-      case 'info':
-        return theme.colors.info;
-    }
-  };
+    return { totalUsers, activeUsers, predictionsCount, participationPct };
+  }, [users]);
 
   const handleLogout = async () => {
     log({ action: 'logout', module: 'auth', title: 'Cierre de sesión admin' });
@@ -207,335 +83,183 @@ export function AdminDashboardScreen() {
     router.replace('/(auth)/login');
   };
 
+  const bg = isDark ? '#0D0D0D' : '#F5F7FA';
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header premium */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.adminAvatar, { backgroundColor: theme.colors.primary }]}>
-            <MaterialCommunityIcons name="shield-crown" size={22} color="#fff" />
+    <ScrollView style={[s.root, { backgroundColor: bg }]} showsVerticalScrollIndicator={false}>
+
+      {/* ── Header — mismo degradado celeste que la app ── */}
+      <LinearGradient
+        colors={[CELESTE_DARK, DEEP_BLUE]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.header}
+      >
+        {/* Decoración geométrica igual a los banners */}
+        <View style={s.circleL} />
+        <View style={s.circleS} />
+
+        <View style={s.headerRow}>
+          <LinearGradient colors={[CELESTE, CELESTE_DARK]} style={s.avatar}>
+            <MaterialCommunityIcons name="shield-crown" size={24} color="#fff" />
+          </LinearGradient>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle}>Panel Admin</Text>
+            <Text style={s.headerSub}>Mundial 2026 🏆</Text>
           </View>
-          <View>
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              Panel Admin
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
-              Mundial 2026 🏆
-            </Text>
-          </View>
+          <Pressable onPress={handleLogout} style={s.logoutBtn}>
+            <MaterialCommunityIcons name="logout" size={20} color="#ef4444" />
+          </Pressable>
         </View>
-        <Pressable onPress={handleLogout} style={[styles.logoutButton, { backgroundColor: 'rgba(244,67,54,0.12)' }]}>
-          <MaterialCommunityIcons name="logout" size={18} color={theme.colors.error} />
-        </Pressable>
-      </View>
+      </LinearGradient>
 
-      {/* Content */}
-      <View style={styles.content}>
-        {/* Stats — 2 columnas grandes */}
-        <View style={styles.statsGrid}>
-          {[
-            { icon: 'account-multiple', value: stats.totalUsers, label: 'Usuarios', color: theme.colors.primary },
-            { icon: 'account-check', value: stats.activeUsers, label: 'Activos', color: theme.colors.success },
-            { icon: 'soccer', value: stats.predictionsCount, label: 'Pronósticos', color: theme.colors.info },
-            { icon: 'gift-outline', value: stats.rewardsCount, label: 'Premios', color: theme.colors.warning },
-            { icon: 'newspaper-variant', value: stats.publishedNews, label: 'Noticias', color: theme.colors.success },
-            { icon: 'image-multiple', value: stats.imagesCount, label: 'Imágenes', color: theme.colors.primary },
-          ].map((stat) => (
-            <View
-              key={stat.label}
-              style={[
-                styles.statCard,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View style={[styles.statIconBox, { backgroundColor: `${stat.color}18` }]}>
-                <MaterialCommunityIcons name={stat.icon as any} size={24} color={stat.color} />
-              </View>
-              <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
+      <View style={[s.content, { backgroundColor: bg }]}>
 
-        <View style={[styles.chartCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Participación general</Text>
-          <View style={styles.chartRow}>
-            <Text style={[styles.chartValue, { color: theme.colors.success }]}>{stats.participationPct}%</Text>
-            <Text style={[styles.chartLabel, { color: theme.colors.textSecondary }]}>
-              {stats.activeUsers}/{stats.totalUsers} usuarios activos
-            </Text>
-          </View>
-          <ProgressBar value={stats.participationPct} />
-        </View>
-
-        <View style={[styles.chartCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>Noticias publicadas (7 días)</Text>
-          <SimpleBarChart data={chart} />
-          <View style={styles.chartHint}>
-            <MaterialCommunityIcons name="view-carousel" size={16} color={theme.colors.textSecondary} />
-            <Text style={[styles.chartHintText, { color: theme.colors.textSecondary }]}>
-              Slider activo: {stats.activeSlides}/{slides.length}
-            </Text>
-          </View>
-        </View>
-
-        {/* Menu Grid — 2 columnas */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-          Módulos
-        </Text>
-
-        <View style={styles.menuGrid}>
-          {MENU_OPTIONS.map((option) => (
-            <Pressable
-              key={option.id}
-              onPress={() => router.push(option.route as any)}
-              style={({ pressed }) => [
-                styles.menuCard,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}
-            >
+        {/* ── Stats ────────────────────────────────────── */}
+        <FadeSlide delay={60}>
+          <View style={s.statsRow}>
+            {[
+              { icon: 'account-multiple', value: stats.totalUsers,       label: 'Usuarios'    },
+              { icon: 'account-check',    value: stats.activeUsers,      label: 'Activos'     },
+              { icon: 'soccer',           value: stats.predictionsCount, label: 'Pronósticos' },
+              { icon: 'percent',          value: `${stats.participationPct}%`, label: 'Part.' },
+            ].map((st) => (
               <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: `${getColorValue(option.color)}18` },
-                ]}
+                key={st.label}
+                style={[s.statCard, {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff',
+                  borderColor:     isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.3)',
+                  shadowColor: CELESTE,
+                }]}
               >
-                <MaterialCommunityIcons
-                  name={option.icon as any}
-                  size={26}
-                  color={getColorValue(option.color)}
-                />
+                <MaterialCommunityIcons name={st.icon as any} size={20} color={CELESTE_DARK} />
+                <Text style={[s.statValue, { color: CELESTE_DARK }]}>{st.value}</Text>
+                <Text style={[s.statLabel, { color: theme.colors.muted }]}>{st.label}</Text>
               </View>
-              <Text style={[styles.menuLabel, { color: theme.colors.text }]}>
-                {option.label}
-              </Text>
-              <Text style={[styles.menuDescription, { color: theme.colors.textSecondary }]}>
-                {option.description}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+            ))}
+          </View>
+        </FadeSlide>
+
+        {/* ── Barra participación ──────────────────────── */}
+        <FadeSlide delay={120}>
+          <View style={[s.card, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff',
+            borderColor:     isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)',
+            shadowColor: CELESTE,
+          }]}>
+            <View style={s.cardHeaderRow}>
+              <MaterialCommunityIcons name="percent" size={18} color={CELESTE_DARK} />
+              <Text style={[s.cardTitle, { color: theme.colors.text }]}>Participación general</Text>
+              <Text style={[s.bigPct, { color: CELESTE_DARK }]}>{stats.participationPct}%</Text>
+            </View>
+            <Text style={[s.cardSub, { color: theme.colors.muted }]}>
+              {stats.activeUsers} de {stats.totalUsers} usuarios activos
+            </Text>
+            {/* Barra celeste → azul */}
+            <View style={[s.track, { backgroundColor: isDark ? 'rgba(110,198,255,0.12)' : '#EBF5FF' }]}>
+              <LinearGradient
+                colors={[CELESTE, CELESTE_DARK]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[s.fill, { width: `${stats.participationPct}%` }]}
+              />
+            </View>
+          </View>
+        </FadeSlide>
+
+        {/* ── Módulos ──────────────────────────────────── */}
+        <FadeSlide delay={180}>
+          <Text style={[s.sectionTitle, { color: theme.colors.text }]}>⚽  Módulos</Text>
+          <View style={s.menuGrid}>
+            {MENU_OPTIONS.map((opt, idx) => (
+              <MenuCard key={opt.id} option={opt} theme={theme} isDark={isDark} delay={idx * 40} onPress={() => router.push(opt.route as any)} />
+            ))}
+          </View>
+        </FadeSlide>
+
       </View>
     </ScrollView>
   );
 }
 
-function SimpleBarChart({ data }: { data: { label: string; value: number }[] }) {
-  const { theme } = useAppTheme();
-  const max = Math.max(...data.map((d) => d.value), 1);
+function MenuCard({ option, theme, isDark, delay, onPress }: {
+  option: MenuOption; theme: any; isDark: boolean; delay: number; onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn  = () => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
+  const onPressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, damping: 15, stiffness: 300 }).start();
 
   return (
-    <View style={styles.barChart}>
-      {data.map((d) => (
-        <View key={d.label} style={styles.barCol}>
-          <View
-            style={[
-              styles.bar,
-              {
-                height: `${Math.round((d.value / max) * 100)}%`,
-                backgroundColor: theme.colors.primary,
-              },
-            ]}
-          />
-          <Text style={[styles.barLabel, { color: theme.colors.textSecondary }]}>{d.label}</Text>
+    <Animated.View style={[mc.wrap, { transform: [{ scale }] }]}>
+      <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} style={{ flex: 1 }}>
+        <View style={[mc.card, {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff',
+          borderColor:     isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)',
+          shadowColor: CELESTE,
+        }]}>
+          {/* Ícono con fondo celeste suave */}
+          <View style={[mc.iconBox, { backgroundColor: isDark ? 'rgba(110,198,255,0.12)' : '#EBF5FF' }]}>
+            <MaterialCommunityIcons name={option.icon as any} size={24} color={CELESTE_DARK} />
+          </View>
+          <Text style={[mc.label, { color: theme.colors.text }]}>{option.label}</Text>
+          <Text style={[mc.desc, { color: theme.colors.muted }]}>{option.description}</Text>
+          {/* Flecha */}
+          <View style={mc.arrow}>
+            <MaterialCommunityIcons name="chevron-right" size={16} color={CELESTE_DARK} />
+          </View>
         </View>
-      ))}
-    </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
-function ProgressBar({ value }: { value: number }) {
-  const { theme } = useAppTheme();
-  const pct = Math.min(Math.max(value, 0), 100);
-
-  return (
-    <View style={[styles.progressTrack, { backgroundColor: theme.colors.surfaceAlt }]}>
-      <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: theme.colors.success }]} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  adminAvatar: {
-    width: 40,
-    height: 40,
+const mc = StyleSheet.create({
+  wrap: { width: '47%' },
+  card: {
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: typography.bold as any,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    fontWeight: typography.regular as any,
-    marginTop: spacing.xs,
-  },
-  logoutButton: {
-    padding: spacing.md,
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  statCard: {
-    width: '48%',
-    borderRadius: radius.lg,
-    padding: spacing.md,
     borderWidth: 1,
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.sm,
+    padding: 16,
+    gap: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  statIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  iconBox:  { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  label:    { fontSize: 13, fontWeight: '800' },
+  desc:     { fontSize: 10, fontWeight: '500', lineHeight: 14 },
+  arrow:    { alignSelf: 'flex-end' },
+});
+
+const s = StyleSheet.create({
+  root:       { flex: 1 },
+  header:     { paddingTop: 56, paddingBottom: 32, paddingHorizontal: 20, position: 'relative', overflow: 'hidden' },
+  circleL:    { position: 'absolute', width: 180, height: 180, borderRadius: 90,  borderWidth: 1.5, borderColor: `${CELESTE}30`, top: -50, right: -40 },
+  circleS:    { position: 'absolute', width: 100, height: 100, borderRadius: 50,  borderWidth: 1,   borderColor: `${CELESTE}20`, top: 30,  right: 60  },
+  headerRow:  { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar:     { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:{ color: '#fff', fontSize: 22, fontWeight: '800' },
+  headerSub:  { color: 'rgba(255,255,255,0.68)', fontSize: 13, fontWeight: '500', marginTop: 2 },
+  logoutBtn:  { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.15)', alignItems: 'center', justifyContent: 'center' },
+  content:    { padding: 16, gap: 16, paddingBottom: 40 },
+  statsRow:   { flexDirection: 'row', gap: 8 },
+  statCard:   {
+    flex: 1, borderRadius: 18, borderWidth: 1, padding: 12,
+    alignItems: 'center', gap: 5,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: typography.bold as any,
+  statValue:  { fontSize: 17, fontWeight: '800' },
+  statLabel:  { fontSize: 9, fontWeight: '600', textAlign: 'center' },
+  card:       {
+    borderRadius: 20, borderWidth: 1, padding: 18, gap: 10,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
   },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: typography.medium as any,
-    textAlign: 'center',
-  },
-  chartCard: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    marginBottom: spacing.lg,
-    ...shadows.sm,
-  },
-  chartTitle: {
-    fontSize: 14,
-    fontWeight: typography.semibold as any,
-    marginBottom: spacing.md,
-  },
-  chartRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  chartValue: {
-    fontSize: 22,
-    fontWeight: typography.bold as any,
-  },
-  chartLabel: {
-    fontSize: 12,
-    fontWeight: typography.medium as any,
-  },
-  progressTrack: {
-    height: 12,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: radius.full,
-  },
-  barChart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 140,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  barCol: {
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: '100%',
-  },
-  bar: {
-    width: '100%',
-    borderRadius: radius.md,
-  },
-  barLabel: {
-    marginTop: spacing.sm,
-    fontSize: 10,
-    fontWeight: typography.medium as any,
-  },
-  chartHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  chartHintText: {
-    fontSize: 12,
-    fontWeight: typography.regular as any,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: typography.semibold as any,
-    marginBottom: spacing.lg,
-  },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  menuCard: {
-    width: '48%',
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    ...shadows.sm,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuLabel: {
-    fontSize: 14,
-    fontWeight: typography.semibold as any,
-  },
-  menuDescription: {
-    fontSize: 12,
-    fontWeight: typography.regular as any,
-    lineHeight: 16,
-  },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle:  { flex: 1, fontSize: 14, fontWeight: '700' },
+  bigPct:     { fontSize: 22, fontWeight: '800' },
+  cardSub:    { fontSize: 12, fontWeight: '500' },
+  track:      { height: 10, borderRadius: 99, overflow: 'hidden' },
+  fill:       { height: '100%', borderRadius: 99 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  menuGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
 });

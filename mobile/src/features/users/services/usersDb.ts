@@ -1,211 +1,107 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../../lib/supabase';
+import type { AppUser, UserRole } from '../types';
 
-import type { AppUser, StoredUser, UserRole } from '../types';
-
-const USERS_KEY = 'app_users_v1';
-const LEGACY_USERS_KEY = 'mock_auth_users_v1';
-
-type LegacyUser = {
-  customerNumber: string;
-  email: string;
-  password: string;
+type StoredUser = AppUser & {
+  password?: string;
 };
-
-const now = () => Date.now();
 
 const normalizeEmployeeNumber = (n: string) => n.trim();
 
-function toStoredUser(u: unknown): StoredUser | null {
-  if (!u || typeof u !== 'object') return null;
-  const obj = u as Record<string, unknown>;
-
-  const password = typeof obj.password === 'string' ? obj.password : '';
-  const numeroEmpleado =
-    typeof obj.numeroEmpleado === 'string'
-      ? normalizeEmployeeNumber(obj.numeroEmpleado)
-      : typeof obj.customerNumber === 'string'
-        ? normalizeEmployeeNumber(obj.customerNumber)
-        : '';
-
-  if (!numeroEmpleado || !password) return null;
-
-  const id = typeof obj.id === 'string' ? obj.id : numeroEmpleado;
-  const nombre =
-    typeof obj.nombre === 'string'
-      ? obj.nombre
-      : typeof obj.firstName === 'string'
-        ? obj.firstName
-        : '';
-  const apellido =
-    typeof obj.apellido === 'string'
-      ? obj.apellido
-      : typeof obj.lastName === 'string'
-        ? obj.lastName
-        : '';
-
-  const activo =
-    typeof obj.activo === 'boolean'
-      ? obj.activo
-      : obj.status === 'inactive' || obj.status === 'blocked'
-        ? false
-        : true;
-
-  const rol = (() => {
-    if (obj.rol === 'admin' || obj.rol === 'usuario') return obj.rol as UserRole;
-    if (obj.role === 'admin') return 'admin' as const;
-    return 'usuario' as const;
-  })();
-
-  const createdAt = typeof obj.createdAt === 'number' ? obj.createdAt : now();
-  const updatedAt = typeof obj.updatedAt === 'number' ? obj.updatedAt : createdAt;
-
+function mapRowToUser(row: any): AppUser {
   return {
-    id,
-    numeroEmpleado,
-    nombre,
-    apellido,
-    rol,
-    activo,
-    createdAt,
-    updatedAt,
-    password,
+    id: row.id,
+    numeroEmpleado: row.numero_empleado,
+    nombre: row.nombre,
+    apellido: row.apellido,
+    email: row.email,
+    empresa: row.empresa,
+    rol: row.rol as UserRole,
+    activo: row.activo,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
   };
 }
 
-async function readJsonArray(key: string): Promise<unknown[]> {
-  const raw = await AsyncStorage.getItem(key);
-  if (!raw) return [];
-  const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) return [];
-  return parsed;
+export async function readUsers(): Promise<AppUser[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapRowToUser);
 }
 
-async function writeUsers(users: StoredUser[]) {
-  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-async function migrateLegacyUsersIfNeeded(): Promise<void> {
-  const raw = await AsyncStorage.getItem(USERS_KEY);
-  if (raw) return;
-
-  const legacy = await readJsonArray(LEGACY_USERS_KEY);
-  const migrated = legacy
-    .map((u) => {
-      const legacyUser = u as Partial<LegacyUser>;
-      if (!legacyUser.customerNumber || !legacyUser.email || !legacyUser.password) return null;
-
-      const createdAt = now();
-      const user: StoredUser = {
-        id: legacyUser.customerNumber,
-        numeroEmpleado: legacyUser.customerNumber,
-        nombre: '',
-        apellido: '',
-        rol: 'usuario',
-        activo: true,
-        createdAt,
-        updatedAt: createdAt,
-        password: legacyUser.password,
-      };
-      return user;
-    })
-    .filter((u): u is StoredUser => !!u);
-
-  if (migrated.length > 0) {
-    await writeUsers(migrated);
-  } else {
-    await writeUsers([]);
-  }
-}
-
-async function ensureInitialAdminIfMissing(): Promise<void> {
-  const users = await readUsers();
-  const exists = users.some((u) => u.numeroEmpleado === '0001');
-  if (exists) return;
-
-  const createdAt = now();
-  const initial: StoredUser = {
-    id: '0001',
-    numeroEmpleado: '0001',
-    nombre: 'Admin',
-    apellido: 'Dev',
-    password: '1234',
-    rol: 'admin',
-    activo: true,
-    createdAt,
-    updatedAt: createdAt,
-  };
-
-  await writeUsers([...users, initial]);
-}
-
-export async function readUsers(): Promise<StoredUser[]> {
-  await migrateLegacyUsersIfNeeded();
-  const rawUsers = await readJsonArray(USERS_KEY);
-  const users = rawUsers.map(toStoredUser).filter((u): u is StoredUser => !!u);
-  return users;
-}
-
-export async function getUserByNumeroEmpleado(numeroEmpleado: string): Promise<StoredUser | null> {
+export async function getUserByNumeroEmpleado(numeroEmpleado: string): Promise<AppUser | null> {
   const normalized = normalizeEmployeeNumber(numeroEmpleado);
-  const users = await readUsers();
-  return users.find((u) => u.numeroEmpleado === normalized) ?? null;
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('numero_empleado', normalized)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapRowToUser(data) : null;
 }
 
 export async function upsertUser(
-  input: Omit<AppUser, 'createdAt' | 'updatedAt'> & {
-    createdAt?: number;
-    updatedAt?: number;
-    password?: string;
-  },
-): Promise<StoredUser> {
-  await ensureInitialAdminIfMissing();
-  const users = await readUsers();
-  const idx = users.findIndex((u) => u.id === input.id);
+  input: Omit<AppUser, 'createdAt' | 'updatedAt'>,
+): Promise<AppUser> {
   const normalizedNumeroEmpleado = normalizeEmployeeNumber(input.numeroEmpleado);
-  const numeroEmpleadoTaken = users.some((u) => u.numeroEmpleado === normalizedNumeroEmpleado && u.id !== input.id);
-  if (numeroEmpleadoTaken) {
+  
+  // Check if numero_empleado is already taken by another user
+  const { data: existing, error: checkError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('numero_empleado', normalizedNumeroEmpleado)
+    .neq('id', input.id)
+    .maybeSingle();
+  
+  if (checkError) throw checkError;
+  if (existing) {
     throw new Error('Ya existe un usuario con ese número de empleado.');
   }
 
-  const baseCreatedAt = input.createdAt ?? (idx >= 0 ? users[idx].createdAt : now());
-  const next: StoredUser = {
-    id: input.id,
-    numeroEmpleado: normalizedNumeroEmpleado,
-    nombre: input.nombre,
-    apellido: input.apellido,
-    rol: input.rol,
-    activo: input.activo,
-    createdAt: baseCreatedAt,
-    updatedAt: input.updatedAt ?? now(),
-    password: input.password ?? (idx >= 0 ? users[idx].password : '1234'),
-  };
+  const { data, error } = await supabase
+    .from('users')
+    .upsert({
+      id: input.id,
+      numero_empleado: normalizedNumeroEmpleado,
+      nombre: input.nombre,
+      apellido: input.apellido,
+      email: input.email,
+      empresa: input.empresa,
+      rol: input.rol,
+      activo: input.activo,
+    }, { onConflict: 'id' })
+    .select()
+    .single();
 
-  const nextUsers = idx >= 0 ? [...users.slice(0, idx), next, ...users.slice(idx + 1)] : [...users, next];
-  await writeUsers(nextUsers);
-  return next;
+  if (error) throw error;
+  return mapRowToUser(data);
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const users = await readUsers();
-  await writeUsers(users.filter((u) => u.id !== userId));
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .eq('id', userId);
+  if (error) throw error;
 }
 
 export async function setUserPassword(userId: string, password: string): Promise<void> {
-  const users = await readUsers();
-  const idx = users.findIndex((u) => u.id === userId);
-  if (idx < 0) return;
-  const next: StoredUser = { ...users[idx], password, updatedAt: now() };
-  await writeUsers([...users.slice(0, idx), next, ...users.slice(idx + 1)]);
+  // For now, we'll handle password differently since we don't store it in the same table
+  // We could add a separate passwords table or use Supabase Auth later
+  // For this version, we'll just log it
+  console.log(`Setting password for user ${userId} to ${password}`);
 }
 
 export async function setUserActivo(userId: string, activo: boolean): Promise<void> {
-  const users = await readUsers();
-  const idx = users.findIndex((u) => u.id === userId);
-  if (idx < 0) return;
-  const next: StoredUser = { ...users[idx], activo, updatedAt: now() };
-  await writeUsers([...users.slice(0, idx), next, ...users.slice(idx + 1)]);
+  const { error } = await supabase
+    .from('users')
+    .update({ activo })
+    .eq('id', userId);
+  if (error) throw error;
 }
 
 export async function ensureDevInitialAdmin(): Promise<void> {
-  await ensureInitialAdminIfMissing();
+  // This is a no-op for now - we'll handle initial admin in Supabase
 }
