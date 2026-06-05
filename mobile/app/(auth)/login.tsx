@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -21,7 +20,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { theme, setThemeMode, themeMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { login } = useAuth();
 
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -76,30 +75,6 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      {/* Botón toggle tema arriba a la derecha */}
-      <View style={{ alignItems: 'flex-end', paddingHorizontal: 20, paddingTop: 8 }}>
-        <Pressable
-          onPress={toggleTheme}
-          hitSlop={12}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: theme.colors.surface,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Ionicons
-            name={theme.isDark ? 'sunny-outline' : 'moon-outline'}
-            size={20}
-            color={theme.colors.text}
-          />
-        </Pressable>
-      </View>
-
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -111,26 +86,11 @@ export default function LoginScreen() {
         >
           {/* Logo + título */}
           <View style={{ alignItems: 'center', marginBottom: 36 }}>
-            <View
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: 24,
-                backgroundColor: theme.colors.surface,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 20,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: theme.isDark ? 0.4 : 0.1,
-                shadowRadius: 12,
-                elevation: 6,
-              }}
-            >
-              <Image source={logoSource} style={{ width: 64, height: 64 }} resizeMode="contain" />
-            </View>
+            <Image
+              source={logoSource}
+              style={{ width: 140, height: 140, marginBottom: 20 }}
+              resizeMode="contain"
+            />
             <Text
               style={{
                 color: theme.colors.text,
@@ -183,14 +143,14 @@ export default function LoginScreen() {
             {submitError ? (
               <View
                 style={{
-                  backgroundColor: theme.isDark ? 'rgba(244,67,54,0.12)' : 'rgba(244,67,54,0.08)',
+                  backgroundColor: 'rgba(61,165,245,0.08)',
                   borderRadius: 10,
                   borderWidth: 1,
-                  borderColor: 'rgba(244,67,54,0.25)',
+                  borderColor: 'rgba(61,165,245,0.25)',
                   padding: 12,
                 }}
               >
-                <Text style={{ color: theme.colors.error, fontSize: 13, fontWeight: '600' }}>
+                <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '600' }}>
                   {submitError}
                 </Text>
               </View>

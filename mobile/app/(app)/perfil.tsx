@@ -6,7 +6,6 @@ import {
   Alert,
   Animated,
   Image,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,21 +16,45 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { Screen } from '../../src/components/Screen';
+<<<<<<< Updated upstream
 import { getUpcomingMatches } from '../../src/features/mockData';
 import { useRanking } from '../../src/features/content/api/ranking';
 import { useUserScores, resultTypeLabel } from '../../src/features/content/api/scores';
 import { useMatches } from '../../src/features/content/api/matches';
 import { toMatchItemFromDb } from '../../src/features/matchesAdapter';
+=======
+import { profileStats, homePosition, getUpcomingMatches } from '../../src/features/mockData';
+import { useUpcomingMatches } from '../../src/hooks/useApiFootball';
+>>>>>>> Stashed changes
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
 
-// ── Paleta — celeste/blanco para header Argentina, rojo solo CTA ──
+// ── Paleta ────────────────────────────────────────────────────
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
 const CELESTE_BG   = '#DDF4FF';
 const DEEP         = '#0F4C81';
 const RED          = '#CC2627';
+
+// ── Logo con fallback a emoji (escudo SVG de la API) ──────────
+function TeamLogoPerfil({ logo, code, size = 52 }: { logo?: string; code: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  const emoji = getFlagEmoji(code);
+
+  if (logo && !failed) {
+    return (
+      <Image
+        source={{ uri: logo }}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return <Text style={{ fontSize: size * 0.78, lineHeight: size }}>{emoji}</Text>;
+}
+
 
 // ────────────────────────────────────────────────────────────
 // Animación entrada
@@ -109,6 +132,7 @@ export default function ProfileScreen() {
     ? `Administrador · ${user.admin_id ?? ''}`
     : `Cliente #${user?.cliente_id ?? ''}`;
   const bg = theme.isDark ? '#0D0D0D' : '#F5F7FA';
+<<<<<<< Updated upstream
   const clienteId = user?.cliente_id ?? '';
   const { data: ranking = [] } = useRanking('general');
   const { data: myScores = [] } = useUserScores(clienteId);
@@ -127,6 +151,40 @@ export default function ProfileScreen() {
       return row && !['FT', 'AET', 'PEN'].includes(row.status ?? '') && new Date(row.match_date) > new Date();
     });
   const nextMatch = nextMatchFromDb ?? getUpcomingMatches(1)[0];
+=======
+
+  // Próximo partido — API real con fallback al mockData
+  const { data: apiUpcoming } = useUpcomingMatches(1);
+  const nextMatch = React.useMemo(() => {
+    if (apiUpcoming && apiUpcoming.length > 0) {
+      const m = apiUpcoming[0];
+      return {
+        id:        String(m.id),
+        homeTeam:  m.homeTeam,
+        awayTeam:  m.awayTeam,
+        homeCode:  m.homeCode,
+        awayCode:  m.awayCode,
+        homeLogo:  m.homeLogo || undefined,
+        awayLogo:  m.awayLogo || undefined,
+        time:      m.time,
+        date:      m.date,
+      };
+    }
+    const mock = getUpcomingMatches(1)[0];
+    if (!mock) return null;
+    return {
+      id:        mock.id,
+      homeTeam:  mock.homeTeam,
+      awayTeam:  mock.awayTeam,
+      homeCode:  mock.homeCode,
+      awayCode:  mock.awayCode,
+      homeLogo:  undefined,
+      awayLogo:  undefined,
+      time:      mock.time,
+      date:      mock.date,
+    };
+  }, [apiUpcoming]);
+>>>>>>> Stashed changes
 
   // ── Selector de foto ──────────────────────────────────────
   const pickImage = async () => {
@@ -397,7 +455,7 @@ export default function ProfileScreen() {
               ]}>
                 <View style={nmS.row}>
                   <View style={nmS.teamCol}>
-                    <Text style={nmS.flag}>{getFlagEmoji(nextMatch.homeCode)}</Text>
+                    <TeamLogoPerfil code={nextMatch.homeCode} size={52} />
                     <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
                       {nextMatch.homeTeam}
                     </Text>
@@ -408,7 +466,7 @@ export default function ProfileScreen() {
                     <Text style={[nmS.date, { color: theme.colors.muted }]}>{nextMatch.date}</Text>
                   </View>
                   <View style={nmS.teamCol}>
-                    <Text style={nmS.flag}>{getFlagEmoji(nextMatch.awayCode)}</Text>
+                    <TeamLogoPerfil code={nextMatch.awayCode} size={52} />
                     <Text style={[nmS.teamName, { color: theme.colors.text }]} numberOfLines={1}>
                       {nextMatch.awayTeam}
                     </Text>
@@ -431,27 +489,6 @@ export default function ProfileScreen() {
               </View>
             </FadeSlide>
           )}
-
-          {/* ══════════════════════════════════════════════════
-              TÉRMINOS Y CONDICIONES
-          ══════════════════════════════════════════════════ */}
-          <FadeSlide delay={230}>
-            <Pressable
-              onPress={() => router.push('/(app)/terminos-y-condiciones')}
-              style={({ pressed }) => [
-                tcS.btn,
-                {
-                  backgroundColor: theme.isDark ? 'rgba(110,198,255,0.06)' : '#F0F8FF',
-                  borderColor: theme.isDark ? 'rgba(110,198,255,0.18)' : 'rgba(110,198,255,0.3)',
-                  opacity: pressed ? 0.75 : 1,
-                },
-              ]}
-            >
-              <Feather name="file-text" size={16} color={CELESTE_DARK} />
-              <Text style={[tcS.text, { color: CELESTE_DARK }]}>Términos y Condiciones</Text>
-              <Feather name="chevron-right" size={15} color={CELESTE_DARK} />
-            </Pressable>
-          </FadeSlide>
 
           {/* ══════════════════════════════════════════════════
               CERRAR SESIÓN — rojo del Grupo Núcleo
@@ -713,17 +750,4 @@ const logoutS = StyleSheet.create({
     borderWidth: 1.5,
   },
   text: { fontSize: 15, fontWeight: '700' },
-});
-
-const tcS = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-  },
-  text: { fontSize: 14, fontWeight: '600', flex: 1 },
 });

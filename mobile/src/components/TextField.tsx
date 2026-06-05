@@ -30,7 +30,7 @@ export function TextField({
   const [visible, setVisible] = useState(false);
 
   const borderColor = error
-    ? theme.colors.error
+    ? theme.colors.primary
     : focused
       ? theme.colors.primary
       : theme.colors.border;
@@ -95,7 +95,7 @@ export function TextField({
       </View>
 
       {error ? (
-        <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 2 }}>{error}</Text>
+        <Text style={{ color: theme.colors.primary, fontSize: 12, marginTop: 2 }}>{error}</Text>
       ) : null}
     </View>
   );

@@ -9,30 +9,60 @@
 import type { NormalizedMatch, NormalizedGroup, NormalizedStanding } from './apiFootball.types';
 import type { MatchStatusShort } from './apiFootball.types';
 
-const BASE = 'https://api.football-data.org/v4';
+const BASE   = 'https://api.football-data.org/v4';
 const WC_CODE = 'WC';
 
 function getToken(): string {
   return process.env.EXPO_PUBLIC_FOOTBALL_DATA_TOKEN ?? '';
 }
 
+function getSupabaseUrl(): string {
+  return process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+}
+
+// En web el browser bloquea CORS hacia football-data.org.
+// Usamos la Supabase Edge Function como proxy.
+function isWebPlatform(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
+}
+
+function buildProxyUrl(fdPath: string, params?: Record<string, string>): string {
+  const supabaseUrl = getSupabaseUrl();
+  const base = `${supabaseUrl}/functions/v1/wc-proxy`;
+  const qs = new URLSearchParams({ path: fdPath, ...params });
+  return `${base}?${qs.toString()}`;
+}
+
+function buildDirectUrl(fdPath: string, params?: Record<string, string>): string {
+  const url = new URL(`${BASE}${fdPath}`);
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  return url.toString();
+}
+
 // ── Fetch base ────────────────────────────────────────────────
 async function fdFetch<T>(path: string, params?: Record<string, string>): Promise<T | null> {
-  const token = getToken();
-  if (!token) {
+  const token     = getToken();
+  const onWeb     = isWebPlatform();
+  const supaUrl   = getSupabaseUrl();
+
+  // En web necesitamos el proxy; si no hay Supabase URL configurada, fallback a null
+  if (onWeb && !supaUrl) {
+    console.warn('[football-data] En web se necesita EXPO_PUBLIC_SUPABASE_URL para el proxy');
+    return null;
+  }
+
+  if (!token && !onWeb) {
     console.warn('[football-data] Token no configurado en EXPO_PUBLIC_FOOTBALL_DATA_TOKEN');
     return null;
   }
 
-  const url = new URL(`${BASE}${path}`);
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  }
+  const url     = onWeb ? buildProxyUrl(path, params) : buildDirectUrl(path, params);
+  const headers: Record<string, string> = onWeb
+    ? { 'Content-Type': 'application/json' }          // proxy no necesita token en el header
+    : { 'X-Auth-Token': token, 'Content-Type': 'application/json' };
 
   try {
-    const res = await fetch(url.toString(), {
-      headers: { 'X-Auth-Token': token },
-    });
+    const res = await fetch(url, { headers });
 
     if (res.status === 429) {
       console.warn('[football-data] Rate limit alcanzado (10 req/min en plan free)');
@@ -164,6 +194,41 @@ function formatTime(utcDate: string): string {
   } catch { return ''; }
 }
 
+// Mapa de TLA de football-data.org (2-3 letras) → código ISO 3 letras que usamos en FLAG_EMOJIS
+const TLA_TO_CODE: Record<string, string> = {
+  MX: 'MEX', ZA: 'RSA', KR: 'KOR', CZ: 'CZE',
+  CA: 'CAN', BA: 'BIH', US: 'USA', PY: 'PAR',
+  QA: 'QAT', CH: 'SUI', BR: 'BRA', MA: 'MAR',
+  HT: 'HAI', SCO: 'SCO', AU: 'AUS', TR: 'TUR',
+  DE: 'GER', CW: 'CUW', NL: 'NED', JP: 'JPN',
+  CI: 'CIV', EC: 'ECU', SE: 'SWE', TN: 'TUN',
+  ES: 'ESP', CV: 'CPV', BE: 'BEL', EG: 'EGY',
+  SA: 'KSA', UY: 'URU', IR: 'IRN', NZ: 'NZL',
+  FR: 'FRA', SN: 'SEN', IQ: 'IRQ', NO: 'NOR',
+  AR: 'ARG', DZ: 'ALG', AT: 'AUT', JO: 'JOR',
+  PT: 'POR', CG: 'CGO', ENG: 'ENG', HR: 'CRO',
+  GH: 'GHA', PA: 'PAN', UZ: 'UZB', CO: 'COL',
+  // ya correctos (3 letras)
+  MEX: 'MEX', RSA: 'RSA', KOR: 'KOR', CZE: 'CZE',
+  CAN: 'CAN', BIH: 'BIH', USA: 'USA', PAR: 'PAR',
+  QAT: 'QAT', SUI: 'SUI', BRA: 'BRA', MAR: 'MAR',
+  HAI: 'HAI', AUS: 'AUS', TUR: 'TUR', GER: 'GER',
+  CUW: 'CUW', NED: 'NED', JPN: 'JPN', CIV: 'CIV',
+  ECU: 'ECU', SWE: 'SWE', TUN: 'TUN', ESP: 'ESP',
+  CPV: 'CPV', BEL: 'BEL', EGY: 'EGY', KSA: 'KSA',
+  URU: 'URU', IRN: 'IRN', NZL: 'NZL', FRA: 'FRA',
+  SEN: 'SEN', IRQ: 'IRQ', NOR: 'NOR', ARG: 'ARG',
+  ALG: 'ALG', AUT: 'AUT', JOR: 'JOR', POR: 'POR',
+  CGO: 'CGO', CRO: 'CRO', GHA: 'GHA', PAN: 'PAN',
+  UZB: 'UZB', COL: 'COL',
+};
+
+function toCode(tla: string | null | undefined, shortName: string): string {
+  if (!tla) return shortName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+  const upper = tla.toUpperCase();
+  return TLA_TO_CODE[upper] ?? upper;
+}
+
 function normalizeMatch(m: FDMatch): NormalizedMatch {
   const status     = mapStatus(m.status);
   const isLive     = ['IN_PLAY', 'PAUSED', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'].includes(m.status);
@@ -177,8 +242,8 @@ function normalizeMatch(m: FDMatch): NormalizedMatch {
     awayTeam:    m.awayTeam.name,
     homeLogo:    m.homeTeam.crest ?? '',
     awayLogo:    m.awayTeam.crest ?? '',
-    homeCode:    m.homeTeam.tla ?? m.homeTeam.shortName?.substring(0, 3).toUpperCase() ?? '???',
-    awayCode:    m.awayTeam.tla ?? m.awayTeam.shortName?.substring(0, 3).toUpperCase() ?? '???',
+    homeCode:    toCode(m.homeTeam.tla, m.homeTeam.shortName),
+    awayCode:    toCode(m.awayTeam.tla, m.awayTeam.shortName),
     homeScore:   score.home,
     awayScore:   score.away,
     date:        formatDate(m.utcDate),
@@ -207,10 +272,14 @@ export async function getWCFixtures(filters?: {
   status?: string;
 }): Promise<NormalizedMatch[]> {
   const params: Record<string, string> = {};
-  if (filters?.dateFrom) params.dateFrom = filters.dateFrom;
-  if (filters?.dateTo)   params.dateTo   = filters.dateTo;
-  if (filters?.stage)    params.stage    = filters.stage;
-  if (filters?.status)   params.status   = filters.status;
+
+  // football-data.org requiere dateFrom Y dateTo juntos
+  if (filters?.dateFrom && filters?.dateTo) {
+    params.dateFrom = filters.dateFrom;
+    params.dateTo   = filters.dateTo;
+  }
+  if (filters?.stage)  params.stage  = filters.stage;
+  if (filters?.status) params.status = filters.status;
 
   const data = await fdFetch<FDMatchesResponse>(
     `/competitions/${WC_CODE}/matches`,
@@ -225,13 +294,24 @@ export async function getWCFixtures(filters?: {
 
 /** Próximos N partidos (scheduled/timed desde hoy) */
 export async function getWCUpcoming(limit = 5): Promise<NormalizedMatch[]> {
-  const today = new Date().toISOString().split('T')[0];
-  const data  = await fdFetch<FDMatchesResponse>(
+  const today  = new Date();
+  const future = new Date(today);
+  future.setDate(today.getDate() + 60); // rango de 60 días — cubre toda la fase de grupos
+
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+  // Sin filtro de status para capturar TIMED, SCHEDULED e IN_PLAY
+  const data = await fdFetch<FDMatchesResponse>(
     `/competitions/${WC_CODE}/matches`,
-    { dateFrom: today, status: 'SCHEDULED' },
+    { dateFrom: fmt(today), dateTo: fmt(future) },
   );
   if (!data) return [];
-  return data.matches.map(normalizeMatch).slice(0, limit);
+  // Filtrar finalizados y ordenar por fecha
+  return data.matches
+    .filter(m => m.status !== 'FINISHED' && m.status !== 'CANCELLED' && m.status !== 'POSTPONED')
+    .sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime())
+    .slice(0, limit)
+    .map(normalizeMatch);
 }
 
 /** Partidos en vivo */

@@ -322,7 +322,7 @@ export function getGreeting(hour?: number): string {
 }
 
 /**
- * Tema Claro
+ * Tema Claro — primary celeste #3DA5F5 (identidad web interna)
  */
 export const lightTheme = {
   name: 'light' as const,
@@ -335,8 +335,8 @@ export const lightTheme = {
     textSecondary: colors.neutral[700],
     textTertiary: colors.neutral[600],
     muted: colors.neutral[500],
-    primary: colors.primary[600],
-    primaryLight: colors.primary[50],
+    primary: '#3DA5F5',
+    primaryLight: '#DDF4FF',
     border: colors.neutral[200],
     divider: colors.neutral[100],
     placeholder: colors.neutral[400],
