@@ -39,9 +39,44 @@ export type SliderSlide = {
 
 const SLIDER_BUCKET = 'slider';
 
-function makeId(): string {
-  // Suficiente para ids de contenido en este proyecto (evita dependencia extra).
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+function randomByte(): number {
+  // UUID v4 sin dependencias (mejor si existe crypto.getRandomValues).
+  try {
+    // RN/Expo suele exponer crypto.getRandomValues (web/metro); si no, fallback.
+    const cryptoObj = (globalThis as unknown as { crypto?: { getRandomValues?: (arr: Uint8Array) => Uint8Array } })
+      .crypto;
+    if (cryptoObj?.getRandomValues) {
+      const arr = new Uint8Array(1);
+      cryptoObj.getRandomValues(arr);
+      return arr[0]!;
+    }
+  } catch {
+    // no-op
+  }
+  return Math.floor(Math.random() * 256);
+}
+
+function makeUuidV4(): string {
+  const b = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) b[i] = randomByte();
+
+  // Version 4
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  // Variant 10xxxxxx
+  b[8] = (b[8]! & 0x3f) | 0x80;
+
+  const hex = Array.from(b, (n) => n.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function guessImageExt(uri: string): 'jpg' | 'png' | 'webp' {
+  const clean = uri.split('?')[0] ?? uri;
+  const m = clean.match(/\.([a-zA-Z0-9]+)$/);
+  const raw = (m?.[1] ?? '').toLowerCase();
+  if (raw === 'png') return 'png';
+  if (raw === 'webp') return 'webp';
+  // Normalizamos jpeg -> jpg y fallback.
+  return 'jpg';
 }
 
 function mapRow(row: SliderSlideRow): SliderSlide {
@@ -116,12 +151,13 @@ export function useUpsertSliderSlide() {
       imageUri?: string;
       imagePath?: string;
     }) => {
-      const id = input.id ?? makeId();
+      const id = input.id ?? makeUuidV4();
 
-      const imagePath =
-        input.imageUri
-          ? `slides/${id}.${(input.imageUri.split('.').pop() || 'jpg').split('?')[0]}`
-          : input.imagePath;
+      // Si viene uri, subimos archivo. Si no, conservamos imagePath (edición sin cambiar imagen).
+      // Importante: image_path en DB es path dentro del bucket (no URL).
+      const imagePath = input.imageUri
+        ? (input.imagePath ?? `slides/${id}.${guessImageExt(input.imageUri)}`)
+        : input.imagePath;
 
       if (!imagePath) throw new Error('Falta imagen');
 
