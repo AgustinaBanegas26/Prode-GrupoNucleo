@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -11,255 +10,370 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
-import { Button } from '../../../components/Button';
 import { useAppTheme } from '../../../providers/ThemeProvider';
-import { getFlagEmoji, getNationalColor, radius, shadows, spacing } from '../../../theme/theme';
-import {
-  useMatches,
-  useMatchesRealtime,
-  useUpsertMatch,
-  matchesQueryKey,
-  type MatchRow,
-} from '../../content/api/matches';
 import { supabase } from '../../../lib/supabase';
-import { toMatchItemFromDb, inferPhaseFromRound } from '../../matchesAdapter';
+import { useMatches, useUpsertMatch, type MatchRow } from '../../content/api/matches';
 
-const PHASES = ['Fase de Grupos', 'Octavos', 'Cuartos', 'Semifinales', 'Final'] as const;
+const CELESTE      = '#6EC6FF';
+const CELESTE_DARK = '#3DA5F5';
+const DEEP_BLUE    = '#0F4C81';
 
-type StatusLabel = 'Próximo' | 'EN VIVO' | 'Finalizado';
-
-function getStatusLabel(status: string): StatusLabel {
-  if (['FT', 'AET', 'PEN'].includes(status)) return 'Finalizado';
-  if (['1H', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE'].includes(status)) return 'EN VIVO';
-  return 'Próximo';
+function statusColor(status: string) {
+  if (status === 'FT' || status === 'AET' || status === 'PEN') return '#22C55E';
+  if (status === '1H' || status === '2H' || status === 'HT' || status === 'LIVE') return '#F59E0B';
+  if (status === 'CANC' || status === 'PST') return '#ef4444';
+  return '#94A3B8';
 }
 
-const STATUS_COLORS: Record<StatusLabel, string> = {
-  Próximo: '#FF9800',
-  'EN VIVO': '#F44336',
-  Finalizado: '#4CAF50',
-};
+const STATUS_OPTIONS = ['NS', 'TBD', '1H', 'HT', '2H', 'FT', 'AET', 'PEN', 'CANC', 'PST'];
 
-// ── Componente fila de partido ────────────────────────────────
+type FormState = Partial<MatchRow> & { fixture_id: number };
 
-function MatchRowCard({ item, onSetResult }: { item: MatchRow; onSetResult: () => void }) {
-  const { theme } = useAppTheme();
-  const adapted = toMatchItemFromDb(item);
-  const homeFlag = getFlagEmoji(adapted.homeCode);
-  const awayFlag = getFlagEmoji(adapted.awayCode);
-  const homeColor = getNationalColor(adapted.homeCode);
-  const awayColor = getNationalColor(adapted.awayCode);
-  const statusLabel = getStatusLabel(item.status ?? '');
-
-  return (
-    <View style={[styles.matchCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, shadows.sm]}>
-      <View style={styles.teamsRow}>
-        <View style={[styles.teamChip, { backgroundColor: homeColor.bg }]}>
-          <Text style={styles.teamFlag}>{homeFlag}</Text>
-          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{adapted.homeCode}</Text>
-        </View>
-
-        <View style={styles.matchMeta}>
-          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[statusLabel] }]}>
-            <Text style={styles.statusText}>{statusLabel}</Text>
-          </View>
-          <Text style={[styles.matchTime, { color: theme.colors.text }]}>
-            {adapted.date} {adapted.time}
-          </Text>
-          {statusLabel === 'Finalizado' && item.home_goals != null && (
-            <Text style={[styles.resultText, { color: theme.colors.primary }]}>
-              {item.home_goals} — {item.away_goals}
-            </Text>
-          )}
-        </View>
-
-        <View style={[styles.teamChip, { backgroundColor: awayColor.bg }]}>
-          <Text style={styles.teamFlag}>{awayFlag}</Text>
-          <Text style={[styles.teamCode, { color: theme.colors.text }]}>{adapted.awayCode}</Text>
-        </View>
-      </View>
-
-      <Text style={[styles.matchInfo, { color: theme.colors.textSecondary }]}>
-        {[adapted.group, adapted.stadium].filter(Boolean).join(' · ')}
-      </Text>
-
-      <View style={styles.actionsRow}>
-        <Pressable onPress={onSetResult} style={[styles.actionBtn, { backgroundColor: theme.colors.surfaceAlt }]}>
-          <Feather name="check-square" size={14} color={theme.colors.success} />
-          <Text style={[styles.actionText, { color: theme.colors.success }]}>Cargar resultado</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+function emptyForm(): FormState {
+  return {
+    fixture_id: 0,
+    home_team: '',
+    away_team: '',
+    match_date: new Date().toISOString(),
+    status: 'NS',
+    round: '',
+    venue: '',
+    home_goals: null,
+    away_goals: null,
+  };
 }
-
-// ── Pantalla principal ────────────────────────────────────────
 
 export function MatchesManagementScreen() {
   const { theme } = useAppTheme();
-  const qc = useQueryClient();
+  const isDark = theme.isDark;
+  const router = useRouter();
 
-  useMatchesRealtime();
+  const { data: matches = [], isLoading, refetch } = useMatches();
+  const upsert = useUpsertMatch();
 
-  const { data: matches, isLoading } = useMatches();
-  const upsertMatch = useUpsertMatch();
-
-  const [phaseFilter, setPhaseFilter] = useState<string>('Todos');
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(null);
-  const [homeGoals, setHomeGoals] = useState('');
-  const [awayGoals, setAwayGoals] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [isEdit, setIsEdit] = useState(false);
+  const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
-    if (!matches) return [];
-    if (phaseFilter === 'Todos') return matches;
-    return matches.filter((m) => inferPhaseFromRound(m.round) === phaseFilter);
-  }, [matches, phaseFilter]);
+    const q = query.toLowerCase();
+    if (!q) return matches;
+    return matches.filter(
+      (m) =>
+        m.home_team.toLowerCase().includes(q) ||
+        m.away_team.toLowerCase().includes(q) ||
+        String(m.fixture_id).includes(q),
+    );
+  }, [matches, query]);
 
-  const openResult = (fixtureId: number) => {
-    const m = matches?.find((x) => x.fixture_id === fixtureId);
-    setSelectedFixtureId(fixtureId);
-    setHomeGoals(String(m?.home_goals ?? ''));
-    setAwayGoals(String(m?.away_goals ?? ''));
-    setResultModalVisible(true);
+  const openCreate = () => {
+    setForm(emptyForm());
+    setIsEdit(false);
+    setModalVisible(true);
   };
 
-  const handleSaveResult = async () => {
-    const h = parseInt(homeGoals, 10);
-    const a = parseInt(awayGoals, 10);
-    if (isNaN(h) || isNaN(a)) {
-      Alert.alert('Error', 'Ingresá resultados válidos.');
+  const openEdit = (m: MatchRow) => {
+    setForm({
+      fixture_id: m.fixture_id,
+      home_team: m.home_team,
+      away_team: m.away_team,
+      match_date: m.match_date,
+      status: m.status,
+      round: m.round ?? '',
+      venue: m.venue ?? '',
+      home_goals: m.home_goals,
+      away_goals: m.away_goals,
+    });
+    setIsEdit(true);
+    setModalVisible(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.home_team?.trim() || !form.away_team?.trim()) {
+      Alert.alert('Error', 'Equipos local y visitante son obligatorios');
       return;
     }
-    if (!selectedFixtureId) return;
-
+    if (!isEdit && (!form.fixture_id || form.fixture_id <= 0)) {
+      Alert.alert('Error', 'fixture_id debe ser un número positivo');
+      return;
+    }
+    setSaving(true);
     try {
-      // 1. Actualizar el resultado en la tabla matches
-      await upsertMatch.mutateAsync({
-        fixture_id: selectedFixtureId,
-        home_goals: h,
-        away_goals: a,
-        status: 'FT',
-        updated_at: new Date().toISOString(),
-      });
-
-      // 2. Ejecutar función de puntaje → calcula puntos y recalcula ranking
-      const { error: rpcError } = await supabase.rpc('score_prediction', {
-        p_fixture_id:  selectedFixtureId,
-        p_home_result: h,
-        p_away_result: a,
-      });
-
-      if (rpcError) {
-        console.warn('[score_prediction]', rpcError.message);
-      }
-
-      setResultModalVisible(false);
-      Alert.alert('✓ Resultado guardado', `Puntos calculados para todos los pronósticos del partido.`);
+      await upsert.mutateAsync({
+        fixture_id: form.fixture_id,
+        home_team: form.home_team!.trim(),
+        away_team: form.away_team!.trim(),
+        match_date: form.match_date ?? new Date().toISOString(),
+        status: form.status ?? 'NS',
+        round: form.round?.trim() ?? null,
+        venue: form.venue?.trim() ?? null,
+        home_goals: form.home_goals ?? null,
+        away_goals: form.away_goals ?? null,
+      } as any);
+      setModalVisible(false);
+      await refetch();
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar.');
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo guardar');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const selectedMatch = matches?.find((m) => m.fixture_id === selectedFixtureId);
-  const selectedAdapted = selectedMatch ? toMatchItemFromDb(selectedMatch) : null;
+  const confirmDelete = (m: MatchRow) => {
+    Alert.alert(
+      'Eliminar partido',
+      `¿Eliminar ${m.home_team} vs ${m.away_team}?`,
+      [
+        { text: 'Cancelar' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('matches')
+              .delete()
+              .eq('fixture_id', m.fixture_id);
+            if (error) Alert.alert('Error', error.message);
+            else await refetch();
+          },
+        },
+      ],
+    );
+  };
+
+  const bg = isDark ? '#0D0D0D' : '#F5F7FA';
+  const cardBg = isDark ? 'rgba(255,255,255,0.05)' : '#fff';
+  const cardBorder = isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)';
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-        <View>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Partidos</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            {matches?.length ?? 0} partidos en Supabase
-          </Text>
+    <View style={[s.root, { backgroundColor: bg }]}>
+      <LinearGradient
+        colors={[CELESTE_DARK, DEEP_BLUE]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.header}
+      >
+        <View style={s.circleL} />
+        <View style={s.headerRow}>
+          <Pressable onPress={() => router.push('/(admin)')} style={s.backBtn}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={s.title}>Partidos</Text>
+            <Text style={s.sub}>{matches.length} partidos</Text>
+          </View>
+          <Pressable onPress={openCreate} style={s.addBtn}>
+            <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+          </Pressable>
+          <Pressable onPress={() => refetch()} style={[s.addBtn, { marginLeft: 6 }]}>
+            <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
+          </Pressable>
         </View>
+      </LinearGradient>
+
+      <View style={[s.searchBox, { backgroundColor: cardBg, borderColor: cardBorder, margin: 16, marginBottom: 8 }]}>
+        <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.muted} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar equipo o ID..."
+          placeholderTextColor={theme.colors.muted}
+          style={[s.searchInput, { color: theme.colors.text }]}
+        />
       </View>
 
-      {/* Phase filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
-        {['Todos', ...PHASES].map((p) => {
-          const active = p === phaseFilter;
-          return (
-            <Pressable
-              key={p}
-              onPress={() => setPhaseFilter(p)}
-              style={[styles.filterPill, { backgroundColor: active ? '#CC2627' : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') }]}
-            >
-              <Text style={[styles.filterText, { color: active ? '#fff' : theme.colors.textSecondary }]}>{p}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {isLoading ? (
-        <View style={styles.loadingBox}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(m) => String(m.fixture_id)}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <MatchRowCard item={item} onSetResult={() => openResult(item.fixture_id)} />
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <MaterialCommunityIcons name="soccer" size={48} color={theme.colors.muted} />
-              <Text style={[styles.emptyText, { color: theme.colors.muted }]}>
-                No hay partidos para esta fase.{'\n'}Los partidos se sincronizan automáticamente desde el backend.
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* Result Modal */}
-      <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
-        <View style={[styles.modalBackdrop, { backgroundColor: theme.colors.overlay }]}>
-          <View style={[styles.resultCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text, marginBottom: spacing.lg }]}>
-              Cargar resultado
+      <FlatList
+        data={filtered}
+        keyExtractor={(m) => String(m.fixture_id)}
+        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 10, paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', paddingTop: 40 }}>
+            <Text style={{ color: theme.colors.muted, fontSize: 14 }}>
+              {isLoading ? 'Cargando...' : 'Sin partidos'}
             </Text>
-            {selectedAdapted && (
-              <Text style={[styles.matchLabel, { color: theme.colors.textSecondary }]}>
-                {getFlagEmoji(selectedAdapted.homeCode)} {selectedAdapted.homeCode}  vs  {selectedAdapted.awayCode} {getFlagEmoji(selectedAdapted.awayCode)}
-              </Text>
-            )}
+          </View>
+        }
+        renderItem={({ item }) => {
+          const sColor = statusColor(item.status);
+          const hasResult = item.home_goals !== null && item.away_goals !== null;
+          const dateStr = new Date(item.match_date).toLocaleString('es-AR', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+          });
+          return (
+            <View style={[s.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+              <View style={s.cardTop}>
+                <View style={[s.statusBadge, { backgroundColor: sColor + '20' }]}>
+                  <Text style={[s.statusText, { color: sColor }]}>{item.status}</Text>
+                </View>
+                <Text style={[s.fixtureId, { color: theme.colors.muted }]}>#{item.fixture_id}</Text>
+                <Text style={[s.dateText, { color: theme.colors.muted }]}>{dateStr}</Text>
+              </View>
+              <View style={s.teamsRow}>
+                <Text style={[s.teamName, { color: theme.colors.text }]} numberOfLines={1}>
+                  {item.home_team}
+                </Text>
+                <Text style={[s.score, { color: hasResult ? CELESTE_DARK : theme.colors.muted }]}>
+                  {hasResult ? `${item.home_goals} - ${item.away_goals}` : 'vs'}
+                </Text>
+                <Text style={[s.teamName, s.teamRight, { color: theme.colors.text }]} numberOfLines={1}>
+                  {item.away_team}
+                </Text>
+              </View>
+              {item.round ? (
+                <Text style={[s.round, { color: theme.colors.muted }]}>{item.round}</Text>
+              ) : null}
+              <View style={s.cardActions}>
+                <Pressable
+                  onPress={() => openEdit(item)}
+                  style={[s.actionBtn, { backgroundColor: CELESTE_DARK + '18' }]}
+                >
+                  <MaterialCommunityIcons name="pencil" size={14} color={CELESTE_DARK} />
+                  <Text style={[s.actionText, { color: CELESTE_DARK }]}>Editar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => confirmDelete(item)}
+                  style={[s.actionBtn, { backgroundColor: '#ef444418' }]}
+                >
+                  <MaterialCommunityIcons name="delete" size={14} color="#ef4444" />
+                  <Text style={[s.actionText, { color: '#ef4444' }]}>Eliminar</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        }}
+      />
 
-            <View style={styles.resultInputRow}>
-              <TextInput
-                value={homeGoals}
-                onChangeText={setHomeGoals}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="0"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[styles.goalInput, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                textAlign="center"
-              />
-              <Text style={[styles.goalDash, { color: theme.colors.muted }]}>—</Text>
-              <TextInput
-                value={awayGoals}
-                onChangeText={setAwayGoals}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="0"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[styles.goalInput, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                textAlign="center"
-              />
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={[mo.backdrop, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+          <View style={[mo.sheet, { backgroundColor: isDark ? '#151515' : '#fff', borderColor: cardBorder }]}>
+            <View style={mo.sheetHeader}>
+              <Text style={[mo.sheetTitle, { color: theme.colors.text }]}>
+                {isEdit ? 'Editar partido' : 'Nuevo partido'}
+              </Text>
+              <Pressable onPress={() => setModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={theme.colors.muted} />
+              </Pressable>
             </View>
 
-            <View style={styles.resultFooter}>
-              <Pressable onPress={() => setResultModalVisible(false)} style={[styles.cancelBtn, { borderColor: theme.colors.border }]}>
-                <Text style={[styles.cancelText, { color: theme.colors.textSecondary }]}>Cancelar</Text>
+            <ScrollView style={mo.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {!isEdit && (
+                <>
+                  <Text style={[mo.label, { color: theme.colors.muted }]}>Fixture ID *</Text>
+                  <TextInput
+                    value={form.fixture_id ? String(form.fixture_id) : ''}
+                    onChangeText={(v) => setForm((f) => ({ ...f, fixture_id: parseInt(v) || 0 }))}
+                    keyboardType="number-pad"
+                    placeholder="ID único del partido"
+                    placeholderTextColor={theme.colors.muted}
+                    style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+                  />
+                </>
+              )}
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Equipo local *</Text>
+              <TextInput
+                value={form.home_team ?? ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, home_team: v }))}
+                placeholder="Ej: Argentina"
+                placeholderTextColor={theme.colors.muted}
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Equipo visitante *</Text>
+              <TextInput
+                value={form.away_team ?? ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, away_team: v }))}
+                placeholder="Ej: Francia"
+                placeholderTextColor={theme.colors.muted}
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Fecha (ISO)</Text>
+              <TextInput
+                value={form.match_date ?? ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, match_date: v }))}
+                placeholder="2026-06-12T18:00:00Z"
+                placeholderTextColor={theme.colors.muted}
+                autoCapitalize="none"
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Round / Fase</Text>
+              <TextInput
+                value={form.round ?? ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, round: v }))}
+                placeholder="Ej: Group Stage - 1"
+                placeholderTextColor={theme.colors.muted}
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Estado</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+                  {STATUS_OPTIONS.map((st) => (
+                    <Pressable
+                      key={st}
+                      onPress={() => setForm((f) => ({ ...f, status: st }))}
+                      style={[mo.statusBtn, {
+                        backgroundColor: form.status === st ? statusColor(st) : 'transparent',
+                        borderColor: statusColor(st),
+                      }]}
+                    >
+                      <Text style={[mo.statusBtnText, { color: form.status === st ? '#fff' : statusColor(st) }]}>
+                        {st}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Goles local</Text>
+              <TextInput
+                value={form.home_goals !== null && form.home_goals !== undefined ? String(form.home_goals) : ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, home_goals: v === '' ? null : parseInt(v) || 0 }))}
+                keyboardType="number-pad"
+                placeholder="— (vacío = no jugado)"
+                placeholderTextColor={theme.colors.muted}
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={[mo.label, { color: theme.colors.muted }]}>Goles visitante</Text>
+              <TextInput
+                value={form.away_goals !== null && form.away_goals !== undefined ? String(form.away_goals) : ''}
+                onChangeText={(v) => setForm((f) => ({ ...f, away_goals: v === '' ? null : parseInt(v) || 0 }))}
+                keyboardType="number-pad"
+                placeholder="— (vacío = no jugado)"
+                placeholderTextColor={theme.colors.muted}
+                style={[mo.input, { color: theme.colors.text, borderColor: cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FA' }]}
+              />
+
+              <Text style={{ color: theme.colors.muted, fontSize: 11, marginBottom: 20, lineHeight: 16 }}>
+                Al guardar goles, el sistema calcula automáticamente los puntos de todas las predicciones de este partido.
+              </Text>
+            </ScrollView>
+
+            <View style={[mo.footer, { borderTopColor: cardBorder }]}>
+              <Pressable onPress={() => setModalVisible(false)} style={[mo.cancelBtn, { borderColor: cardBorder }]}>
+                <Text style={{ color: theme.colors.muted, fontWeight: '700' }}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={handleSaveResult} disabled={upsertMatch.isPending} style={styles.confirmBtn}>
-                <Text style={styles.confirmText}>{upsertMatch.isPending ? 'Guardando...' : 'Confirmar'}</Text>
+              <Pressable onPress={handleSave} disabled={saving} style={[mo.saveBtn, { opacity: saving ? 0.7 : 1 }]}>
+                <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={mo.saveBtnGrad}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
+                    {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear partido'}
+                  </Text>
+                </LinearGradient>
               </Pressable>
             </View>
           </View>
@@ -269,43 +383,45 @@ export function MatchesManagementScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, borderBottomWidth: 1 },
-  title: { fontSize: 20, fontWeight: '800' },
-  subtitle: { fontSize: 12, marginTop: 2 },
-  filterScroll: { maxHeight: 52 },
-  filterContent: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
-  filterText: { fontSize: 12, fontWeight: '700' },
-  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40 },
-  listContent: { padding: spacing.lg, paddingBottom: 100, gap: spacing.md },
-  matchCard: { borderRadius: radius.xl, borderWidth: 1, padding: spacing.lg, gap: spacing.sm },
-  teamsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  teamChip: { flex: 1, alignItems: 'center', borderRadius: radius.lg, padding: spacing.sm, gap: 4 },
-  teamFlag: { fontSize: 28 },
-  teamCode: { fontSize: 14, fontWeight: '800' },
-  matchMeta: { alignItems: 'center', gap: 4, flex: 0.8 },
-  statusBadge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3 },
-  statusText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  matchTime: { fontSize: 13, fontWeight: '700' },
-  resultText: { fontSize: 18, fontWeight: '800' },
-  matchInfo: { fontSize: 11, textAlign: 'center' },
-  actionsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, gap: 4 },
+  header: { paddingTop: 56, paddingBottom: 24, paddingHorizontal: 20, position: 'relative', overflow: 'hidden' },
+  circleL: { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: `${CELESTE}25`, top: -60, right: -40 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  title: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  sub: { color: 'rgba(255,255,255,0.68)', fontSize: 12, fontWeight: '500', marginTop: 2 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, height: 46 },
+  searchInput: { flex: 1, fontSize: 14 },
+  card: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 8 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 },
+  statusText: { fontSize: 11, fontWeight: '800' },
+  fixtureId: { fontSize: 11, fontWeight: '500' },
+  dateText: { flex: 1, fontSize: 11, fontWeight: '500', textAlign: 'right' },
+  teamsRow: { flexDirection: 'row', alignItems: 'center' },
+  teamName: { flex: 1, fontSize: 15, fontWeight: '700' },
+  teamRight: { textAlign: 'right' },
+  score: { width: 60, textAlign: 'center', fontSize: 16, fontWeight: '800' },
+  round: { fontSize: 11, fontWeight: '500' },
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   actionText: { fontSize: 12, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', paddingTop: 60, gap: spacing.md, paddingHorizontal: spacing.xl },
-  emptyText: { fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 22 },
-  modalBackdrop: { flex: 1, justifyContent: 'center', padding: spacing.xl },
-  resultCard: { borderRadius: 28, borderWidth: 1, padding: spacing.xl, alignItems: 'center', gap: spacing.lg },
-  modalTitle: { fontSize: 17, fontWeight: '800' },
-  matchLabel: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  resultInputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  goalInput: { width: 72, height: 72, borderRadius: radius.xl, borderWidth: 2, fontSize: 28, fontWeight: '800' },
-  goalDash: { fontSize: 24, fontWeight: '300' },
-  resultFooter: { flexDirection: 'row', gap: spacing.md, width: '100%' },
-  cancelBtn: { flex: 1, height: 48, borderRadius: radius.xl, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontSize: 14, fontWeight: '700' },
-  confirmBtn: { flex: 1, height: 48, borderRadius: radius.xl, backgroundColor: '#CC2627', alignItems: 'center', justifyContent: 'center' },
-  confirmText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+});
+
+const mo = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '90%', overflow: 'hidden' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  sheetTitle: { fontSize: 18, fontWeight: '800' },
+  body: { paddingHorizontal: 20 },
+  label: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 14, marginBottom: 4 },
+  statusBtn: { borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 6 },
+  statusBtnText: { fontSize: 12, fontWeight: '700' },
+  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1 },
+  cancelBtn: { flex: 1, height: 48, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  saveBtn: { flex: 2, borderRadius: 16, overflow: 'hidden' },
+  saveBtnGrad: { height: 48, alignItems: 'center', justifyContent: 'center' },
 });

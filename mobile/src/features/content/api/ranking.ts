@@ -2,9 +2,6 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 
-// Schema real: id, cliente_id, nombre, total_points, total_played,
-//   correct_exact, correct_winner, position, updated_at
-
 export type RankingRow = {
   id: string;
   cliente_id: string;
@@ -17,18 +14,64 @@ export type RankingRow = {
   updated_at: string;
 };
 
-export const rankingQueryKey = ['ranking'] as const;
+export type RankingCacheRow = {
+  id: string;
+  scope: string;
+  cliente_id: string;
+  points: number;
+  played: number;
+  diff: number;
+  exact_hits: number;
+  updated_at: string;
+};
 
-export function useRanking() {
-  return useQuery<RankingRow[]>({
-    queryKey: rankingQueryKey,
-    queryFn:  async () => {
+export type RankingItem = {
+  id: string;
+  userName: string;
+  points: number;
+  played: number;
+  position: number;
+};
+
+export type RankingPeriod = 'general' | 'semanal' | 'mensual';
+
+export const rankingQueryKey = (period: RankingPeriod = 'general') =>
+  ['ranking', period] as const;
+
+export function useRanking(period: RankingPeriod = 'general') {
+  return useQuery<RankingItem[]>({
+    queryKey: rankingQueryKey(period),
+    queryFn: async () => {
+      if (period === 'general') {
+        // Use ranking table which has nombres
+        const { data, error } = await supabase
+          .from('ranking')
+          .select('*')
+          .order('total_points', { ascending: false });
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as RankingRow[]).map((r, i) => ({
+          id: r.cliente_id,
+          userName: r.nombre ?? `Cliente ${r.cliente_id}`,
+          points: r.total_points ?? 0,
+          played: r.total_played ?? 0,
+          position: r.position ?? i + 1,
+        }));
+      }
+      // semanal / mensual — use ranking_cache scopes
+      const scope = period === 'semanal' ? 'semanal' : 'mensual';
       const { data, error } = await supabase
-        .from('ranking')
+        .from('ranking_cache')
         .select('*')
-        .order('total_points', { ascending: false });
+        .eq('scope', scope)
+        .order('points', { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []) as RankingRow[];
+      return ((data ?? []) as RankingCacheRow[]).map((r, i) => ({
+        id: r.cliente_id,
+        userName: `Cliente ${r.cliente_id}`,
+        points: r.points ?? 0,
+        played: r.played ?? 0,
+        position: i + 1,
+      }));
     },
     staleTime: 2 * 60 * 1000,
   });
@@ -40,7 +83,10 @@ export function useRankingRealtime() {
     const channel = supabase
       .channel('ranking-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking' }, () => {
-        qc.invalidateQueries({ queryKey: rankingQueryKey });
+        qc.invalidateQueries({ queryKey: ['ranking'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking_cache' }, () => {
+        qc.invalidateQueries({ queryKey: ['ranking'] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
