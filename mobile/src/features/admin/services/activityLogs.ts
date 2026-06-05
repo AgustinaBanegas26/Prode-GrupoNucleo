@@ -23,15 +23,14 @@ export type LogActivityInput = {
 
 /**
  * Registra una acción en la tabla activity_logs.
- * No lanza excepciones — si falla, loguea en consola y continúa.
+ * Schema real: id, cliente_id, action, metadata (jsonb), created_at
  */
 export async function logActivity(input: LogActivityInput): Promise<void> {
   try {
     const { error } = await supabase.from('activity_logs').insert({
-      user_id: input.user_id,
-      cliente_id: input.cliente_id ?? null,
-      action: input.action,
-      detail: input.detail ?? null,
+      cliente_id: input.cliente_id ?? input.user_id ?? null,
+      action:     input.action,
+      metadata:   input.detail ? { detail: input.detail, user_id: input.user_id } : { user_id: input.user_id },
       created_at: new Date().toISOString(),
     });
     if (error) {
