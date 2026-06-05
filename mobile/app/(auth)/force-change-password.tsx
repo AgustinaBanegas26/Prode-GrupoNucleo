@@ -94,21 +94,11 @@ export default function ForceChangePasswordScreen() {
         >
           {/* Logo + título */}
           <View style={{ alignItems: 'center', marginBottom: 32 }}>
-            <View
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: 24,
-                backgroundColor: theme.colors.surface,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 20,
-              }}
-            >
-              <Image source={logoSource} style={{ width: 64, height: 64 }} resizeMode="contain" />
-            </View>
+            <Image
+              source={logoSource}
+              style={{ width: 140, height: 140, marginBottom: 20 }}
+              resizeMode="contain"
+            />
             <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 }}>
               Cambiá tu contraseña
             </Text>
@@ -211,14 +201,14 @@ export default function ForceChangePasswordScreen() {
             {error ? (
               <View
                 style={{
-                  backgroundColor: 'rgba(244,67,54,0.1)',
+                  backgroundColor: 'rgba(61,165,245,0.08)',
                   borderRadius: 10,
                   borderWidth: 1,
-                  borderColor: 'rgba(244,67,54,0.3)',
+                  borderColor: 'rgba(61,165,245,0.25)',
                   padding: 12,
                 }}
               >
-                <Text style={{ color: theme.colors.error, fontSize: 13, fontWeight: '600' }}>
+                <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '600' }}>
                   {error}
                 </Text>
               </View>

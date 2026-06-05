@@ -23,6 +23,8 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Screen } from "../../src/components/Screen";
 import { getUpcomingMatches } from "../../src/features/mockData";
+import { useUpcomingMatches } from "../../src/hooks/useApiFootball";
+import type { NormalizedMatch } from "../../src/services/apiFootball.types";
 import { useAppTheme } from "../../src/providers/ThemeProvider";
 import { useAuth } from "../../src/providers/AuthProvider";
 import { getGreeting, getFlagEmoji } from "../../src/theme/theme";
@@ -269,12 +271,46 @@ const bannerS = StyleSheet.create({
   dot: { height: 6, borderRadius: 3 },
 });
 
+// ── Logo con fallback a emoji ─────────────────────────────────
+function TeamLogoHome({ logo, code, size = 44 }: { logo?: string; code: string; size?: number }) {
+  const [failed, setFailed] = React.useState(false);
+  const emoji = getFlagEmoji(code);
+
+  if (logo && !failed) {
+    return (
+      <Image
+        source={{ uri: logo }}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  // Fallback siempre muestra emoji grande
+  return <Text style={{ fontSize: size * 0.78, lineHeight: size }}>{emoji}</Text>;
+}
+
 // ── Card partido próximo ───────────────────────────────────────
+type UpcomingMatch = {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeCode: string;
+  awayCode: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  group?: string;
+  phase: string;
+  time: string;
+  date: string;
+  stadium: string;
+};
+
 function UpcomingMatchCard({
   match,
   onPress,
 }: {
-  match: ReturnType<typeof getUpcomingMatches>[number];
+  match: UpcomingMatch;
   onPress: () => void;
 }) {
   const { theme } = useAppTheme();
@@ -335,7 +371,7 @@ function UpcomingMatchCard({
         {/* Equipos */}
         <View style={upS.teamsRow}>
           <View style={upS.teamCol}>
-            <Text style={upS.flag}>{getFlagEmoji(match.homeCode)}</Text>
+            <TeamLogoHome logo={match.homeLogo} code={match.homeCode} size={44} />
             <Text
               style={[upS.teamName, { color: theme.colors.text }]}
               numberOfLines={1}
@@ -349,7 +385,7 @@ function UpcomingMatchCard({
           </View>
 
           <View style={upS.teamCol}>
-            <Text style={upS.flag}>{getFlagEmoji(match.awayCode)}</Text>
+            <TeamLogoHome logo={match.awayLogo} code={match.awayCode} size={44} />
             <Text
               style={[upS.teamName, { color: theme.colors.text }]}
               numberOfLines={1}
@@ -552,8 +588,40 @@ export default function AppHomeScreen() {
   const greeting = getGreeting();
   const firstName = user.nombre?.split(" ")[0] ?? "Hola";
   const initials = (user.nombre ?? "U").substring(0, 2).toUpperCase();
-  const upcoming = getUpcomingMatches(3);
   const bg = theme.isDark ? "#0D0D0D" : "#F5F7FA";
+
+  // Datos de la API — con fallback al mockData si no hay respuesta
+  const { data: apiMatches } = useUpcomingMatches(3);
+  const upcoming: UpcomingMatch[] = React.useMemo(() => {
+    if (apiMatches && apiMatches.length > 0) {
+      return apiMatches.map(m => ({
+        id:        String(m.id),
+        homeTeam:  m.homeTeam,
+        awayTeam:  m.awayTeam,
+        homeCode:  m.homeCode,
+        awayCode:  m.awayCode,
+        homeLogo:  m.homeLogo || undefined,
+        awayLogo:  m.awayLogo || undefined,
+        group:     m.group ?? undefined,
+        phase:     m.phase,
+        time:      m.time,
+        date:      m.date,
+        stadium:   m.stadium,
+      }));
+    }
+    return getUpcomingMatches(3).map(m => ({
+      id:       m.id,
+      homeTeam: m.homeTeam,
+      awayTeam: m.awayTeam,
+      homeCode: m.homeCode,
+      awayCode: m.awayCode,
+      group:    m.group,
+      phase:    m.phase,
+      time:     m.time,
+      date:     m.date,
+      stadium:  m.stadium,
+    }));
+  }, [apiMatches]);
 
   return (
     <Screen style={{ backgroundColor: bg }}>

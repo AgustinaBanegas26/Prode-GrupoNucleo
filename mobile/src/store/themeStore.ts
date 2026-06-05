@@ -16,7 +16,7 @@ const THEME_STORAGE_KEY = 'app_theme_mode_v1';
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      themeMode: 'system',
+      themeMode: 'light',
       isHydrated: false,
       setThemeMode: (mode: ThemeMode) => set({ themeMode: mode }),
       setHydrated: (value: boolean) => set({ isHydrated: value }),
