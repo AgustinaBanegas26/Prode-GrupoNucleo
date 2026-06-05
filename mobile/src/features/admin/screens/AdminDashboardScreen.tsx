@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-import React, { useEffect, useMemo } from 'react';
-import { View, ScrollView, Text, StyleSheet, Pressable } from 'react-native';
-=======
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
@@ -11,7 +7,6 @@ import {
   Text,
   View,
 } from 'react-native';
->>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';

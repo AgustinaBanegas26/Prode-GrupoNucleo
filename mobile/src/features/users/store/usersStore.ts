@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { AppUser, StoredUser, UserRole } from '../types';
 import { deleteUser, readUsers, setUserActivo, setUserPassword, upsertUser } from '../services/usersDb';
 
-type UserInput = Omit<AppUser, 'createdAt' | 'updatedAt'>;
+export type UserInput = Omit<AppUser, 'createdAt' | 'updatedAt'>;
 
 type UsersStore = {
   users: AppUser[];

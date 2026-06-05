@@ -1,41 +1,4 @@
-<<<<<<< HEAD
 import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-import { supabase } from '../../../lib/supabase';
-
-// ── Tipos ─────────────────────────────────────────────────────
-
-export type RankingRow = {
-  id: string;
-  user_id: string;
-  cliente_id: string;
-  nombre: string;
-  total_points: number;
-  total_played: number;
-  correct_exact: number;
-  correct_winner: number;
-  position: number | null;
-  updated_at: string;
-};
-
-// ── Query key ─────────────────────────────────────────────────
-
-export const rankingQueryKey = ['ranking'] as const;
-
-// ── Hooks ─────────────────────────────────────────────────────
-
-export function useRanking() {
-  return useQuery({
-    queryKey: rankingQueryKey,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ranking')
-        .select('*')
-        .order('total_points', { ascending: false });
-      if (error) throw new Error(error.message);
-      return (data ?? []) as RankingRow[];
-=======
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 
@@ -74,51 +37,32 @@ export function useRanking(scope: string = 'general') {
         .eq('scope', scope)
         .order('points', { ascending: false });
       if (error) throw error;
-      
-      // Join with users to get names (we'll improve this later)
+
+      // Join with users to get names
       const { data: usersData } = await supabase.from('users').select('id, nombre, apellido');
       const userMap = new Map(usersData?.map(u => [u.id, `${u.nombre} ${u.apellido}`]) || []);
-      
+
       return (data || []).map((row, index) => ({
         ...mapRowToRanking(row, index),
         userName: userMap.get(row.cliente_id) || row.cliente_id,
       }));
->>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
     },
   });
 }
 
-<<<<<<< HEAD
-/** Suscripción realtime — invalida ranking cuando hay cambios */
-export function useRankingRealtime() {
-  const qc = useQueryClient();
-=======
 export function useRankingRealtime() {
   const queryClient = useQueryClient();
->>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
 
   useEffect(() => {
     const channel = supabase
       .channel('ranking-realtime')
-<<<<<<< HEAD
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking' }, () => {
-        qc.invalidateQueries({ queryKey: rankingQueryKey });
-=======
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking_cache' }, () => {
         queryClient.invalidateQueries({ queryKey: rankingQueryKey });
->>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-<<<<<<< HEAD
-  }, [qc]);
-}
-=======
   }, [queryClient]);
 }
-
-import { useEffect } from 'react';
->>>>>>> f921ecfb913d9ae6569503301c9878427bfa1f9d
