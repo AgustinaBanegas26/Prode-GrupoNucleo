@@ -101,9 +101,11 @@ BEGIN
   END LOOP;
 END $$;
 
--- clientes: lectura y actualización propias (anon key)
+-- clientes: CRUD completo para panel admin (anon key)
 CREATE POLICY "clientes_read_anon"   ON clientes FOR SELECT TO anon USING (true);
+CREATE POLICY "clientes_insert_anon" ON clientes FOR INSERT TO anon WITH CHECK (true);
 CREATE POLICY "clientes_update_anon" ON clientes FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "clientes_delete_anon" ON clientes FOR DELETE TO anon USING (true);
 
 -- matches: lectura pública
 CREATE POLICY "matches_read_anon"  ON matches FOR SELECT TO anon USING (true);
@@ -157,6 +159,30 @@ CREATE POLICY "avatars_anon_upload" ON storage.objects
 
 CREATE POLICY "avatars_anon_update" ON storage.objects
   FOR UPDATE TO anon USING (bucket_id = 'avatars') WITH CHECK (bucket_id = 'avatars');
+
+-- ── 10b. Storage bucket para slider ──────────────────────────
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('slider', 'slider', true)
+ON CONFLICT (id) DO NOTHING;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "slider_public_read" ON storage.objects;
+  DROP POLICY IF EXISTS "slider_anon_upload" ON storage.objects;
+  DROP POLICY IF EXISTS "slider_anon_update" ON storage.objects;
+  DROP POLICY IF EXISTS "slider_anon_delete" ON storage.objects;
+END $$;
+
+CREATE POLICY "slider_public_read" ON storage.objects
+  FOR SELECT TO anon USING (bucket_id = 'slider');
+
+CREATE POLICY "slider_anon_upload" ON storage.objects
+  FOR INSERT TO anon WITH CHECK (bucket_id = 'slider');
+
+CREATE POLICY "slider_anon_update" ON storage.objects
+  FOR UPDATE TO anon USING (bucket_id = 'slider') WITH CHECK (bucket_id = 'slider');
+
+CREATE POLICY "slider_anon_delete" ON storage.objects
+  FOR DELETE TO anon USING (bucket_id = 'slider');
 
 -- ── 11. Función recalcular ranking (usa schema real) ─────────
 CREATE OR REPLACE FUNCTION recalculate_ranking()

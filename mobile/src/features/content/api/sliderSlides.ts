@@ -5,7 +5,7 @@ import { supabase } from '../../../lib/supabase';
 import { deleteStorageObject, getPublicUrl, uploadImageFromUri } from '../../../lib/storage';
 
 export type SliderSlideRow = {
-  id: string;
+  id: number;
   title: string;
   description: string;
   image_path: string;
@@ -16,7 +16,6 @@ export type SliderSlideRow = {
   sort_order: number;
   is_active: boolean;
   created_at: string;
-  updated_at: string;
 };
 
 export type SliderSlide = {
@@ -34,19 +33,23 @@ export type SliderSlide = {
   order: number;
   active: boolean;
   createdAt: string;
-  updatedAt: string;
 };
 
 const SLIDER_BUCKET = 'slider';
 
-function makeId(): string {
-  // Suficiente para ids de contenido en este proyecto (evita dependencia extra).
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+function makeNumericId(): number {
+  return Date.now();
+}
+
+function parseSlideId(id: string | undefined): number | null {
+  if (!id) return null;
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function mapRow(row: SliderSlideRow): SliderSlide {
   return {
-    id: row.id,
+    id: String(row.id),
     title: row.title,
     description: row.description ?? '',
     imagePath: row.image_path,
@@ -60,7 +63,6 @@ function mapRow(row: SliderSlideRow): SliderSlide {
     order: row.sort_order,
     active: !!row.is_active,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -112,16 +114,19 @@ export function useUpsertSliderSlide() {
         internalLink?: string;
         externalLink?: string;
       };
-      // Si viene uri, se sube archivo. Si no, se conserva imagePath (edición sin cambiar imagen)
       imageUri?: string;
       imagePath?: string;
     }) => {
-      const id = input.id ?? makeId();
+      const existingId = parseSlideId(input.id);
+      const slideId = existingId ?? makeNumericId();
 
-      const imagePath =
-        input.imageUri
-          ? `slides/${id}.${(input.imageUri.split('.').pop() || 'jpg').split('?')[0]}`
-          : input.imagePath;
+      const ext = input.imageUri
+        ? (input.imageUri.split('.').pop() || 'jpg').split('?')[0]
+        : 'jpg';
+
+      const imagePath = input.imageUri
+        ? `slides/${slideId}.${ext}`
+        : input.imagePath;
 
       if (!imagePath) throw new Error('Falta imagen');
 
@@ -129,24 +134,25 @@ export function useUpsertSliderSlide() {
         await uploadImageFromUri({ bucket: SLIDER_BUCKET, path: imagePath, uri: input.imageUri });
       }
 
-      const { error } = await supabase.from('slider_slides').upsert(
-        {
-          id,
-          title: input.title,
-          description: input.description,
-          image_path: imagePath,
-          button_enabled: input.button.enabled,
-          button_text: input.button.text,
-          internal_link: input.button.internalLink ?? null,
-          external_link: input.button.externalLink ?? null,
-          sort_order: input.order,
-          is_active: input.active,
-        },
-        { onConflict: 'id' },
-      );
+      const payload = {
+        id: slideId,
+        title: input.title,
+        description: input.description,
+        image_path: imagePath,
+        button_enabled: input.button.enabled,
+        button_text: input.button.text,
+        internal_link: input.button.internalLink ?? null,
+        external_link: input.button.externalLink ?? null,
+        sort_order: input.order,
+        is_active: input.active,
+      };
+
+      const { error } = existingId
+        ? await supabase.from('slider_slides').update(payload).eq('id', existingId)
+        : await supabase.from('slider_slides').insert(payload);
 
       if (error) throw new Error(error.message);
-      return id;
+      return String(slideId);
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: sliderQueryKey });
@@ -158,14 +164,16 @@ export function useDeleteSliderSlide() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; imagePath: string }) => {
-      const { error } = await supabase.from('slider_slides').delete().eq('id', input.id);
+      const numericId = parseSlideId(input.id);
+      if (!numericId) throw new Error('ID de slide inválido');
+
+      const { error } = await supabase.from('slider_slides').delete().eq('id', numericId);
       if (error) throw new Error(error.message);
 
-      // delete image (best-effort)
       try {
         await deleteStorageObject({ bucket: SLIDER_BUCKET, paths: [input.imagePath] });
       } catch {
-        // no-op
+        // best-effort
       }
     },
     onSuccess: async () => {
@@ -178,9 +186,15 @@ export function useReorderSliderSlides() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (idsInOrder: string[]) => {
-      const rows = idsInOrder.map((id, idx) => ({ id, sort_order: idx + 1 }));
-      const { error } = await supabase.from('slider_slides').upsert(rows, { onConflict: 'id' });
-      if (error) throw new Error(error.message);
+      for (let idx = 0; idx < idsInOrder.length; idx++) {
+        const id = parseSlideId(idsInOrder[idx]);
+        if (!id) continue;
+        const { error } = await supabase
+          .from('slider_slides')
+          .update({ sort_order: idx + 1 })
+          .eq('id', id);
+        if (error) throw new Error(error.message);
+      }
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: sliderQueryKey });

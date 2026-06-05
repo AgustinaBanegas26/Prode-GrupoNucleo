@@ -32,11 +32,28 @@ export type UpsertPredictionInput = {
   score_away: number | null;
 };
 
-// ── Query key ─────────────────────────────────────────────────
+// ── Query keys ────────────────────────────────────────────────
 export const predictionsQueryKey = (clienteId: string) =>
   ['predictions', clienteId] as const;
 
+export const allPredictionsQueryKey = ['predictions', 'all'] as const;
+
 // ── Hooks ─────────────────────────────────────────────────────
+
+/** Todas las predicciones — uso admin (dashboard, participación) */
+export function useAllPredictions() {
+  return useQuery({
+    queryKey: allPredictionsQueryKey,
+    queryFn:  async () => {
+      const { data, error } = await supabase
+        .from('predictions')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as PredictionRow[];
+    },
+  });
+}
 
 export function usePredictions(clienteId: string | undefined) {
   return useQuery({
@@ -104,6 +121,7 @@ export function useUpsertPrediction() {
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: predictionsQueryKey(variables.cliente_id) });
+      qc.invalidateQueries({ queryKey: allPredictionsQueryKey });
     },
   });
 }

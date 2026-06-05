@@ -33,7 +33,7 @@ export function RankingsScreen() {
   const [query,  setQuery]  = useState('');
 
   const { user } = useAuth();
-  const { data: ranking = [] } = useRanking(period);
+  const { data: ranking = [] } = useRanking();
   const { data: scoring } = useScoringConfig();
   const updateScoring = useUpdateScoringConfig();
   useRankingRealtime();
@@ -52,7 +52,7 @@ export function RankingsScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return ranking.filter(item => !q || item.userName.toLowerCase().includes(q));
+    return ranking.filter(item => !q || item.nombre.toLowerCase().includes(q));
   }, [ranking, query]);
 
   const bg         = isDark ? '#0D0D0D' : '#F5F7FA';
@@ -171,14 +171,15 @@ export function RankingsScreen() {
         </View>
 
         <View style={s.list}>
-          {filtered.map((item) => {
-            const medal = medalColor(item.position);
+          {filtered.map((item, idx) => {
+            const pos = item.position ?? idx + 1;
+            const medal = medalColor(pos);
             return (
               <View key={item.id} style={[s.row, { backgroundColor: cardBg, borderColor: cardBorder, shadowColor: CELESTE }]}>
-                <Text style={[s.rank, { color: medal }]}>{item.position}</Text>
-                <Text style={[s.rowName, { color: theme.colors.text }]} numberOfLines={1}>{item.userName}</Text>
-                <Text style={[s.rowPts, { color: CELESTE_DARK }]}>{item.points}</Text>
-                <Text style={[s.rowPj, { color: textMuted }]}>{item.played}</Text>
+                <Text style={[s.rank, { color: medal }]}>{pos}</Text>
+                <Text style={[s.rowName, { color: theme.colors.text }]} numberOfLines={1}>{item.nombre}</Text>
+                <Text style={[s.rowPts, { color: CELESTE_DARK }]}>{item.total_points}</Text>
+                <Text style={[s.rowPj, { color: textMuted }]}>{item.total_played}</Text>
               </View>
             );
           })}

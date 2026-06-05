@@ -15,4 +15,6 @@ export type AppUser = {
   ultimoAcceso?: number | null;
   /** clientes.created_at */
   createdAt?: number | null;
+  /** clientes.avatar_url */
+  avatarUrl?: string | null;
 };

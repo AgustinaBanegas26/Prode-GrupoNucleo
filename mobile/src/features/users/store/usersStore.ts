@@ -53,10 +53,11 @@ export const useUsersStore = create<UsersStore>((set, get) => ({
 }));
 
 export const makeEmptyUser = (): UserInput => ({
-  id: `${Date.now()}`, // bigint-safe
+  id: '',
   clienteId: '',
   nombre: '',
-  email: '',
+  email: null,
   activo: true,
   primerLogin: true,
+  avatarUrl: null,
 });

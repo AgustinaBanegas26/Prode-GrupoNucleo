@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   FlatList,
   Image,
   Modal,
@@ -13,10 +14,10 @@ import {
   View,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
-import { AdminScreenHeader } from '../../../components/AdminScreenHeader';
-import { Button } from '../../../components/Button';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { radius, shadows, spacing } from '../../../theme/theme';
 import {
@@ -29,7 +30,21 @@ import {
 } from '../../content/api/sliderSlides';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 
-const RED = '#CC2627';
+const CELESTE      = '#6EC6FF';
+const CELESTE_DARK = '#3DA5F5';
+const DEEP_BLUE    = '#0F4C81';
+
+function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity,    { toValue: 1, duration: 320, delay, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 320, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+}
 
 // ── Tipo del form ─────────────────────────────────────────────
 type SlideForm = {
@@ -123,9 +138,9 @@ function SlideCard({
           </Text>
         ) : null}
         {item.button.enabled && item.button.text ? (
-          <View style={[card.btnChip, { backgroundColor: 'rgba(204,38,39,0.10)' }]}>
-            <Feather name="link" size={11} color={RED} />
-            <Text style={[card.btnChipText, { color: RED }]} numberOfLines={1}>
+          <View style={[card.btnChip, { backgroundColor: 'rgba(61,165,245,0.12)' }]}>
+            <Feather name="link" size={11} color={CELESTE_DARK} />
+            <Text style={[card.btnChipText, { color: CELESTE_DARK }]} numberOfLines={1}>
               Botón: {item.button.text}
             </Text>
           </View>
@@ -173,11 +188,11 @@ function SlideCard({
         {/* Editar */}
         <Pressable
           onPress={onEdit}
-          style={[card.actionBtn, { backgroundColor: 'rgba(204,38,39,0.10)' }]}
+          style={[card.actionBtn, { backgroundColor: 'rgba(61,165,245,0.12)' }]}
           accessibilityLabel="Editar slide"
         >
-          <Feather name="edit-2" size={14} color={RED} />
-          <Text style={[card.actionText, { color: RED }]}>Editar</Text>
+          <Feather name="edit-2" size={14} color={CELESTE_DARK} />
+          <Text style={[card.actionText, { color: CELESTE_DARK }]}>Editar</Text>
         </Pressable>
 
         {/* Eliminar */}
@@ -219,7 +234,9 @@ const card = StyleSheet.create({
 // ── Pantalla principal ─────────────────────────────────────────
 export function SliderManagementScreen() {
   const { theme } = useAppTheme();
-  const { data: slides = [], isLoading } = useSliderSlides();
+  const isDark = theme.isDark;
+  const router = useRouter();
+  const { data: slides = [] } = useSliderSlides();
   useSliderRealtime();
   const upsertMutation  = useUpsertSliderSlide();
   const deleteMutation  = useDeleteSliderSlide();
@@ -358,25 +375,29 @@ export function SliderManagementScreen() {
     });
   };
 
-  const addBtn = (
-    <Pressable
-      onPress={openCreate}
-      style={[scr.addBtn, { backgroundColor: RED }]}
-      accessibilityRole="button"
-      accessibilityLabel="Agregar slide"
-    >
-      <Feather name="plus" size={16} color="#fff" />
-      <Text style={scr.addBtnText}>Agregar</Text>
-    </Pressable>
-  );
+  const bg = isDark ? '#0D0D0D' : '#F5F7FA';
 
   return (
-    <View style={[scr.root, { backgroundColor: theme.colors.background }]}>
-      <AdminScreenHeader
-        title="Slider"
-        subtitle={`${sorted.length} slide${sorted.length !== 1 ? 's' : ''} · se muestra en Inicio`}
-        rightElement={addBtn}
-      />
+    <View style={[scr.root, { backgroundColor: bg }]}>
+      <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={scr.header}>
+        <View style={scr.circleL} />
+        <FadeSlide>
+          <View style={scr.headerRow}>
+            <Pressable onPress={() => router.push('/(admin)')} style={scr.backBtn}>
+              <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={scr.title}>Slider</Text>
+              <Text style={scr.sub}>
+                {sorted.length} slide{sorted.length !== 1 ? 's' : ''} · se muestra en Inicio
+              </Text>
+            </View>
+            <Pressable onPress={openCreate} style={scr.addBtn} accessibilityLabel="Agregar slide">
+              <Feather name="plus" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        </FadeSlide>
+      </LinearGradient>
 
       <FlatList
         data={sorted}
@@ -385,8 +406,8 @@ export function SliderManagementScreen() {
         contentContainerStyle={scr.listContent}
         ListEmptyComponent={
           <View style={scr.emptyBox}>
-            <View style={[scr.emptyIcon, { backgroundColor: 'rgba(204,38,39,0.10)' }]}>
-              <MaterialCommunityIcons name="view-carousel-outline" size={52} color={RED} />
+            <View style={[scr.emptyIcon, { backgroundColor: 'rgba(61,165,245,0.12)' }]}>
+              <MaterialCommunityIcons name="view-carousel-outline" size={52} color={CELESTE_DARK} />
             </View>
             <Text style={[scr.emptyTitle, { color: theme.colors.text }]}>
               Sin slides todavía
@@ -394,11 +415,8 @@ export function SliderManagementScreen() {
             <Text style={[scr.emptySubtitle, { color: theme.colors.muted }]}>
               Las imágenes que agregues aparecerán automáticamente en la pantalla Inicio de todos los usuarios.
             </Text>
-            <Pressable
-              onPress={openCreate}
-              style={[scr.emptyBtn, { backgroundColor: RED }]}
-              accessibilityRole="button"
-            >
+            <Pressable onPress={openCreate} style={scr.emptyBtn} accessibilityRole="button">
+              <LinearGradient colors={[CELESTE, CELESTE_DARK]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
               <Feather name="plus" size={16} color="#fff" />
               <Text style={scr.emptyBtnText}>Agregar primer slide</Text>
             </Pressable>
@@ -448,7 +466,7 @@ export function SliderManagementScreen() {
                   modal.imagePickerBtn,
                   {
                     backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: (form.imageUri || form.imageUrl) ? RED : theme.colors.border,
+                    borderColor: (form.imageUri || form.imageUrl) ? CELESTE_DARK : theme.colors.border,
                     borderStyle: (form.imageUri || form.imageUrl) ? 'solid' : 'dashed',
                   },
                 ]}
@@ -527,7 +545,7 @@ export function SliderManagementScreen() {
                 <Switch
                   value={form.buttonEnabled}
                   onValueChange={(v) => setForm((s) => ({ ...s, buttonEnabled: v }))}
-                  trackColor={{ false: theme.colors.border, true: RED }}
+                  trackColor={{ false: theme.colors.border, true: CELESTE_DARK }}
                   thumbColor="#fff"
                 />
               </View>
@@ -579,8 +597,9 @@ export function SliderManagementScreen() {
               <Pressable
                 onPress={handleSave}
                 disabled={saving}
-                style={[modal.saveBtn, { opacity: saving ? 0.75 : 1 }]}
+                style={[modal.saveBtn, { opacity: saving ? 0.75 : 1, overflow: 'hidden' }]}
               >
+                <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 {saving ? (
                   <Text style={modal.saveBtnText}>Guardando...</Text>
                 ) : (
@@ -603,14 +622,19 @@ export function SliderManagementScreen() {
 
 const scr = StyleSheet.create({
   root: { flex: 1 },
+  header: { paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20, overflow: 'hidden', position: 'relative' },
+  circleL: { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: 'rgba(110,198,255,0.20)', top: -60, right: -40 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  title: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  sub: { color: 'rgba(255,255,255,0.68)', fontSize: 12, marginTop: 2 },
+  addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
   listContent: { padding: spacing.lg, paddingBottom: 100, gap: spacing.md },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   emptyBox: { alignItems: 'center', paddingTop: 48, paddingHorizontal: spacing['2xl'], gap: spacing.lg },
   emptyIcon: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
   emptySubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.xl, marginTop: spacing.sm },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.xl, marginTop: spacing.sm, overflow: 'hidden' },
   emptyBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 });
 
@@ -623,8 +647,8 @@ const modal = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: spacing.md, textTransform: 'uppercase', letterSpacing: 0.4 },
   input: { borderWidth: 1, borderRadius: radius.lg, height: 48, paddingHorizontal: spacing.md, fontSize: 14 },
   imagePickerBtn: { height: 180, borderRadius: radius.xl, borderWidth: 1.5, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  imagePreview: { ...StyleSheet.absoluteFillObject },
-  changeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  imagePreview: { ...StyleSheet.absoluteFill },
+  changeOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 6 },
   changeText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   imagePlaceholder: { alignItems: 'center', gap: 8, padding: spacing.xl },
   imagePlaceholderText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
@@ -632,10 +656,10 @@ const modal = StyleSheet.create({
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg, paddingVertical: spacing.sm },
   switchLabel: { fontSize: 14, fontWeight: '600' },
   switchHint: { fontSize: 11, marginTop: 2 },
-  buttonSection: { gap: 4, marginTop: spacing.sm, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: RED + '40' },
+  buttonSection: { gap: 4, marginTop: spacing.sm, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: CELESTE_DARK + '40' },
   footer: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderTopWidth: 1 },
   cancelBtn: { flex: 1, height: 48, borderRadius: radius.xl, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cancelText: { fontSize: 14, fontWeight: '700' },
-  saveBtn: { flex: 2, height: 48, borderRadius: radius.xl, backgroundColor: RED, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  saveBtn: { flex: 2, height: 48, borderRadius: radius.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
