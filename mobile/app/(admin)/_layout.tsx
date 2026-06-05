@@ -37,5 +37,6 @@ export default function AdminLayout() {
       <Stack.Screen name="reports" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="app-versions" />
+    </Stack>
   );
 }
