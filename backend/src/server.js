@@ -22,7 +22,7 @@ const {
   createVersion,
   updateVersion,
   listVersions,
-} = require('./services/appVersion');
+} = require('./services/appVersionService');
 
 const app = express();
 app.use(express.json());
@@ -178,17 +178,20 @@ app.post('/admin/app/version', requireAdmin, async (req, res) => {
 
 /**
  * PUT /admin/app/version/:id
- * Actualiza una versión existente (active, forceUpdate, changelog, etc.)
+ * Actualiza una versión existente.
+ * SOLO permite: active, forceUpdate, changelog
  */
 app.put('/admin/app/version/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { version, versionCode, apkUrl, forceUpdate, changelog, active } = req.body ?? {};
 
+    // Inmutabilidad: estos campos NO se pueden modificar luego de creado
+    if (version !== undefined || versionCode !== undefined || apkUrl !== undefined) {
+      return sendError(res, 400, 'No se permite modificar version, versionCode ni apkUrl');
+    }
+
     const data = await updateVersion(id, {
-      ...(version !== undefined && { version }),
-      ...(versionCode !== undefined && { versionCode: Number(versionCode) }),
-      ...(apkUrl !== undefined && { apkUrl }),
       ...(forceUpdate !== undefined && { forceUpdate }),
       ...(changelog !== undefined && { changelog }),
       ...(active !== undefined && { active }),
