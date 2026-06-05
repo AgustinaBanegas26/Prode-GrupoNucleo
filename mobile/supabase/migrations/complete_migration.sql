@@ -1,121 +1,144 @@
 -- ═══════════════════════════════════════════════════════════════
--- MIGRACIÓN COMPLETA A SUPABASE
+-- MIGRACIÓN FINAL — adaptada al schema real de Supabase
+-- Tablas existentes: admins, clientes, matches, predictions,
+--   ranking, news, rewards, notifications, slider_slides,
+--   activity_logs
 -- Ejecutar en: Supabase → SQL Editor
 -- ═══════════════════════════════════════════════════════════════
 
--- ── 1. Agregar avatar_url a clientes ─────────────────────────
+-- ── 1. Columnas faltantes en clientes ────────────────────────
 ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
--- ── 2. Tabla activity_logs ───────────────────────────────────
-CREATE TABLE IF NOT EXISTS activity_logs (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     TEXT        NOT NULL,
-  cliente_id  TEXT,
-  action      TEXT        NOT NULL,
-  detail      TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id    ON activity_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_action     ON activity_logs(action);
+-- ── 2. Adaptar activity_logs al schema real ──────────────────
+-- Schema real: id, cliente_id, action, metadata (jsonb), created_at
+-- Agregar columna metadata si no existe
+ALTER TABLE activity_logs
+  ADD COLUMN IF NOT EXISTS metadata JSONB;
 
--- ── 3. Tabla news ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS news (
-  id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  title       TEXT        NOT NULL,
-  description TEXT        NOT NULL DEFAULT '',
-  image_url   TEXT,
-  published   BOOLEAN     NOT NULL DEFAULT FALSE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_news_published ON news(published);
+-- ── 3. Adaptar predictions al schema real ────────────────────
+-- Schema real: id, cliente_id, fixture_id, pick_winner, score_home,
+--   score_away, points_earned, locked, submitted_at, created_at, updated_at
+-- Agregar columna locked si no existe
+ALTER TABLE predictions
+  ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE;
 
--- ── 4. Tabla notifications ────────────────────────────────────
-CREATE TABLE IF NOT EXISTS notifications (
-  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  title           TEXT        NOT NULL,
-  body            TEXT        NOT NULL,
-  audience        TEXT        NOT NULL DEFAULT 'global'
-                              CHECK (audience IN ('global','group','individual')),
-  target_group    TEXT,
-  target_user_id  TEXT,
-  sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+ALTER TABLE predictions
+  ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT NOW();
 
--- ── 5. Tabla slider_slides ────────────────────────────────────
-CREATE TABLE IF NOT EXISTS slider_slides (
-  id             TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  title          TEXT        NOT NULL,
-  description    TEXT        NOT NULL DEFAULT '',
-  image_path     TEXT        NOT NULL DEFAULT '',
-  button_enabled BOOLEAN     NOT NULL DEFAULT FALSE,
-  button_text    TEXT        NOT NULL DEFAULT '',
-  internal_link  TEXT,
-  external_link  TEXT,
-  sort_order     INTEGER     NOT NULL DEFAULT 1,
-  is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- ── 4. Adaptar news al schema real ───────────────────────────
+-- Schema real: id, title, content, image_url, published, created_at
+-- El código usa 'description' pero la tabla tiene 'content'
+-- Agregar alias para compatibilidad
+ALTER TABLE news
+  ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
 
--- ── 6. Tabla rewards ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS rewards (
-  id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name        TEXT        NOT NULL,
-  description TEXT        NOT NULL DEFAULT '',
-  image_url   TEXT,
-  quantity    INTEGER     NOT NULL DEFAULT 0,
-  status      TEXT        NOT NULL DEFAULT 'active'
-                          CHECK (status IN ('active','inactive')),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Sincronizar description desde content si ya hay datos
+UPDATE news SET description = content WHERE description = '' AND content IS NOT NULL;
 
--- ── 7. RLS ───────────────────────────────────────────────────
+-- ── 5. Adaptar notifications al schema real ──────────────────
+-- Schema real: id, title, message, target_role, created_at
+-- El código usa 'body' y 'audience' — agregar columnas compatibles
+ALTER TABLE notifications
+  ADD COLUMN IF NOT EXISTS body TEXT DEFAULT '';
+ALTER TABLE notifications
+  ADD COLUMN IF NOT EXISTS audience TEXT DEFAULT 'global';
+
+-- Sincronizar body desde message
+UPDATE notifications SET body = message WHERE body = '' AND message IS NOT NULL;
+
+-- ── 6. Agregar columnas faltantes en ranking ─────────────────
+-- Schema real: id, cliente_id, nombre, total_points, total_played,
+--   correct_exact, correct_winner, position, updated_at
+ALTER TABLE ranking
+  ADD COLUMN IF NOT EXISTS correct_winner INTEGER NOT NULL DEFAULT 0;
+
+-- ── 7. Columnas faltantes en matches ─────────────────────────
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS home_logo TEXT;
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS away_logo TEXT;
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS round TEXT;
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS venue TEXT;
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- ── 8. Índices útiles ────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_predictions_cliente_id  ON predictions(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_predictions_fixture_id  ON predictions(fixture_id);
+CREATE INDEX IF NOT EXISTS idx_ranking_total_points    ON ranking(total_points DESC);
+CREATE INDEX IF NOT EXISTS idx_ranking_cliente_id      ON ranking(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_matches_match_date      ON matches(match_date ASC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created   ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_news_published          ON news(published);
+
+-- ── 9. RLS — asegurar que todas las tablas tienen políticas ──
+
+-- Habilitar RLS donde no está activo
 ALTER TABLE activity_logs  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE predictions     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ranking         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE matches         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE slider_slides   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rewards         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE slider_slides   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clientes        ENABLE ROW LEVEL SECURITY;
 
--- Eliminar políticas si ya existen para evitar duplicados
-DO $$ BEGIN
-  DROP POLICY IF EXISTS "read_activity_logs"       ON activity_logs;
-  DROP POLICY IF EXISTS "insert_activity_logs"     ON activity_logs;
-  DROP POLICY IF EXISTS "read_news"                ON news;
-  DROP POLICY IF EXISTS "anon_manage_news"         ON news;
-  DROP POLICY IF EXISTS "read_notifications"       ON notifications;
-  DROP POLICY IF EXISTS "anon_manage_notifications"ON notifications;
-  DROP POLICY IF EXISTS "read_slider_slides"       ON slider_slides;
-  DROP POLICY IF EXISTS "anon_manage_slider"       ON slider_slides;
-  DROP POLICY IF EXISTS "read_rewards"             ON rewards;
-  DROP POLICY IF EXISTS "anon_manage_rewards"      ON rewards;
+-- Limpiar políticas existentes para recrearlas limpias
+DO $$ DECLARE
+  pol RECORD;
+BEGIN
+  FOR pol IN
+    SELECT policyname, tablename FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename IN ('activity_logs','predictions','ranking','matches',
+                      'news','notifications','rewards','slider_slides','clientes')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+  END LOOP;
 END $$;
 
--- activity_logs
-CREATE POLICY "read_activity_logs"   ON activity_logs FOR SELECT TO anon USING (true);
-CREATE POLICY "insert_activity_logs" ON activity_logs FOR INSERT TO anon WITH CHECK (true);
+-- clientes: lectura y actualización propias (anon key)
+CREATE POLICY "clientes_read_anon"   ON clientes FOR SELECT TO anon USING (true);
+CREATE POLICY "clientes_update_anon" ON clientes FOR UPDATE TO anon USING (true) WITH CHECK (true);
 
--- news
-CREATE POLICY "read_news"            ON news FOR SELECT TO anon USING (published = true);
-CREATE POLICY "anon_manage_news"     ON news FOR ALL    TO anon USING (true) WITH CHECK (true);
+-- matches: lectura pública
+CREATE POLICY "matches_read_anon"  ON matches FOR SELECT TO anon USING (true);
+CREATE POLICY "matches_write_anon" ON matches FOR ALL    TO anon USING (true) WITH CHECK (true);
+
+-- predictions: lectura y escritura por anon
+CREATE POLICY "predictions_read_anon"   ON predictions FOR SELECT TO anon USING (true);
+CREATE POLICY "predictions_insert_anon" ON predictions FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "predictions_update_anon" ON predictions FOR UPDATE TO anon USING (true) WITH CHECK (true);
+
+-- ranking: lectura pública
+CREATE POLICY "ranking_read_anon"   ON ranking FOR SELECT TO anon USING (true);
+CREATE POLICY "ranking_update_anon" ON ranking FOR ALL    TO anon USING (true) WITH CHECK (true);
+
+-- news: lectura de publicadas + gestión admin
+CREATE POLICY "news_read_published" ON news FOR SELECT TO anon USING (published = true);
+CREATE POLICY "news_all_anon"       ON news FOR ALL    TO anon USING (true) WITH CHECK (true);
 
 -- notifications
-CREATE POLICY "read_notifications"        ON notifications FOR SELECT TO anon USING (true);
-CREATE POLICY "anon_manage_notifications" ON notifications FOR ALL    TO anon USING (true) WITH CHECK (true);
-
--- slider_slides
-CREATE POLICY "read_slider_slides"  ON slider_slides FOR SELECT TO anon USING (is_active = true);
-CREATE POLICY "anon_manage_slider"  ON slider_slides FOR ALL    TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "notifications_read"  ON notifications FOR SELECT TO anon USING (true);
+CREATE POLICY "notifications_write" ON notifications FOR ALL    TO anon USING (true) WITH CHECK (true);
 
 -- rewards
-CREATE POLICY "read_rewards"        ON rewards FOR SELECT TO anon USING (status = 'active');
-CREATE POLICY "anon_manage_rewards" ON rewards FOR ALL    TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "rewards_read"   ON rewards FOR SELECT TO anon USING (true);
+CREATE POLICY "rewards_write"  ON rewards FOR ALL    TO anon USING (true) WITH CHECK (true);
 
--- ── 8. Storage bucket para fotos de perfil ───────────────────
+-- slider_slides
+CREATE POLICY "slider_read"    ON slider_slides FOR SELECT TO anon USING (true);
+CREATE POLICY "slider_write"   ON slider_slides FOR ALL    TO anon USING (true) WITH CHECK (true);
+
+-- activity_logs
+CREATE POLICY "activity_read"   ON activity_logs FOR SELECT TO anon USING (true);
+CREATE POLICY "activity_insert" ON activity_logs FOR INSERT TO anon WITH CHECK (true);
+
+-- ── 10. Storage bucket para avatars ──────────────────────────
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
@@ -134,3 +157,91 @@ CREATE POLICY "avatars_anon_upload" ON storage.objects
 
 CREATE POLICY "avatars_anon_update" ON storage.objects
   FOR UPDATE TO anon USING (bucket_id = 'avatars') WITH CHECK (bucket_id = 'avatars');
+
+-- ── 11. Función recalcular ranking (usa schema real) ─────────
+CREATE OR REPLACE FUNCTION recalculate_ranking()
+RETURNS void AS $$
+BEGIN
+  INSERT INTO ranking (cliente_id, nombre, total_points, total_played, correct_exact, correct_winner, position, updated_at)
+  SELECT
+    p.cliente_id,
+    c.nombre,
+    COALESCE(SUM(p.points_earned), 0),
+    COUNT(*),
+    COUNT(*) FILTER (WHERE p.status = 'correct'),
+    COUNT(*) FILTER (WHERE p.status IN ('correct','partial')),
+    0,
+    NOW()
+  FROM predictions p
+  JOIN clientes c ON c.cliente_id = p.cliente_id
+  GROUP BY p.cliente_id, c.nombre
+  ON CONFLICT (cliente_id) DO UPDATE SET
+    nombre         = EXCLUDED.nombre,
+    total_points   = EXCLUDED.total_points,
+    total_played   = EXCLUDED.total_played,
+    correct_exact  = EXCLUDED.correct_exact,
+    correct_winner = EXCLUDED.correct_winner,
+    updated_at     = NOW();
+
+  WITH ranked AS (
+    SELECT cliente_id,
+           ROW_NUMBER() OVER (ORDER BY total_points DESC, correct_exact DESC) AS pos
+    FROM ranking
+  )
+  UPDATE ranking r SET position = ranked.pos
+  FROM ranked WHERE r.cliente_id = ranked.cliente_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── 12. Función calcular puntos de pronósticos ───────────────
+CREATE OR REPLACE FUNCTION score_prediction(
+  p_fixture_id  INTEGER,
+  p_home_result INTEGER,
+  p_away_result INTEGER
+)
+RETURNS void AS $$
+DECLARE
+  real_winner TEXT;
+  pred        RECORD;
+  pts         INTEGER;
+  st          TEXT;
+BEGIN
+  real_winner := CASE
+    WHEN p_home_result > p_away_result THEN 'home'
+    WHEN p_home_result < p_away_result THEN 'away'
+    ELSE 'draw'
+  END;
+
+  FOR pred IN
+    SELECT * FROM predictions
+    WHERE fixture_id = p_fixture_id AND status = 'pending'
+  LOOP
+    pts := 0;
+    st  := 'incorrect';
+
+    IF pred.score_home = p_home_result AND pred.score_away = p_away_result THEN
+      pts := 3; st := 'correct';
+    ELSIF pred.pick_winner = real_winner THEN
+      pts := 1; st := 'partial';
+    END IF;
+
+    UPDATE predictions
+    SET points_earned = pts, status = st, updated_at = NOW()
+    WHERE id = pred.id;
+  END LOOP;
+
+  PERFORM recalculate_ranking();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── 13. Unique constraint en ranking por cliente_id ──────────
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ranking_cliente_id_key'
+    AND conrelid = 'ranking'::regclass
+  ) THEN
+    ALTER TABLE ranking ADD CONSTRAINT ranking_cliente_id_key UNIQUE (cliente_id);
+  END IF;
+END $$;

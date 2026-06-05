@@ -83,8 +83,8 @@ export function UserActivityScreen() {
       .limit(200);
 
     if (!error && data) {
-      // Enriquecer con nombres de clientes
-      const clienteIds = [...new Set(data.map(d => d.cliente_id).filter(Boolean))];
+      // Schema real: id, cliente_id, action, metadata (jsonb), created_at
+      const clienteIds = [...new Set(data.map((d: any) => d.cliente_id).filter(Boolean))];
       let nombreMap: Record<string, string> = {};
       if (clienteIds.length > 0) {
         const { data: clientes } = await supabase
@@ -95,9 +95,14 @@ export function UserActivityScreen() {
           nombreMap[c.cliente_id] = c.nombre;
         }
       }
-      setLogs(data.map(d => ({
-        ...d,
-        nombre: nombreMap[d.cliente_id] ?? d.cliente_id ?? d.user_id,
+      setLogs(data.map((d: any) => ({
+        id:         d.id,
+        user_id:    d.cliente_id ?? '',
+        cliente_id: d.cliente_id ?? null,
+        action:     d.action,
+        detail:     d.metadata?.detail ?? null,
+        created_at: d.created_at,
+        nombre:     nombreMap[d.cliente_id] ?? d.cliente_id ?? 'Admin',
       })));
     }
     setLoading(false);
