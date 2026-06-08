@@ -8,6 +8,8 @@ export type UploadImageResult = {
   publicUrl: string;
 };
 
+export type UploadProgressCallback = (percent: number) => void;
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'] as const;
 
@@ -49,6 +51,7 @@ function validateImageSize(body: Blob | ArrayBuffer) {
 }
 
 export function getPublicUrl(bucket: string, path: string): string {
+  if (!path) return '';
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
@@ -86,20 +89,100 @@ async function uriToUploadBody(uri: string): Promise<{ body: Blob | ArrayBuffer;
   return { body: blob, contentType: blob.type || contentTypeForExt(ext) };
 }
 
+function getStorageAuthHeaders(): Record<string, string> {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  const headers: Record<string, string> = {
+    apikey: supabaseAnonKey,
+  };
+
+  const restHeaders = (supabase as { rest?: { headers?: Record<string, string> } }).rest?.headers;
+  const authHeader = restHeaders?.Authorization;
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  } else {
+    headers.Authorization = `Bearer ${supabaseAnonKey}`;
+  }
+
+  return { supabaseUrl, ...headers } as Record<string, string> & { supabaseUrl: string };
+}
+
+function uploadWithProgress(
+  url: string,
+  headers: Record<string, string>,
+  body: Blob | ArrayBuffer,
+  contentType: string,
+  onProgress?: UploadProgressCallback,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+
+    Object.entries(headers).forEach(([key, value]) => {
+      if (key !== 'supabaseUrl') xhr.setRequestHeader(key, value);
+    });
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.setRequestHeader('x-upsert', 'true');
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+      } else {
+        let message = `Error subiendo imagen (${xhr.status})`;
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          if (parsed?.message) message = parsed.message;
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // ignore parse errors
+        }
+        reject(new Error(message));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Error de red al subir la imagen'));
+    xhr.onabort = () => reject(new Error('Carga de imagen cancelada'));
+
+    xhr.send(body);
+  });
+}
+
 export async function uploadImageFromUri(opts: {
   bucket: string;
   path: string;
   uri: string;
+  onProgress?: UploadProgressCallback;
 }): Promise<UploadImageResult> {
-  const { bucket, path, uri } = opts;
+  const { bucket, path, uri, onProgress } = opts;
+
+  onProgress?.(0);
   const { body, contentType } = await uriToUploadBody(uri);
+  onProgress?.(15);
 
-  const { error } = await supabase.storage.from(bucket).upload(path, body, {
-    upsert: true,
-    contentType,
-  });
-  if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
+  if (onProgress) {
+    const auth = getStorageAuthHeaders();
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    const url = `${auth.supabaseUrl}/storage/v1/object/${bucket}/${encodedPath}`;
+    const { supabaseUrl: _, ...headers } = auth;
+    await uploadWithProgress(url, headers, body, contentType, (pct) => {
+      onProgress(Math.min(99, 15 + Math.round(pct * 0.85)));
+    });
+  } else {
+    const { error } = await supabase.storage.from(bucket).upload(path, body, {
+      upsert: true,
+      contentType,
+    });
+    if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
+  }
 
+  onProgress?.(100);
   return { bucket, path, publicUrl: getPublicUrl(bucket, path) };
 }
 
@@ -108,7 +191,8 @@ export async function deleteStorageObject(opts: {
   paths: string[];
 }): Promise<void> {
   const { bucket, paths } = opts;
-  if (!paths.length) return;
-  const { error } = await supabase.storage.from(bucket).remove(paths);
+  const validPaths = paths.filter(Boolean);
+  if (!validPaths.length) return;
+  const { error } = await supabase.storage.from(bucket).remove(validPaths);
   if (error) throw new Error(`Error eliminando archivo: ${error.message}`);
 }

@@ -12,6 +12,7 @@ import {
   FlatList,
   Image,
   LayoutChangeEvent,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,7 +30,7 @@ import { useAppTheme } from "../../src/providers/ThemeProvider";
 import { useAuth } from "../../src/providers/AuthProvider";
 import { getGreeting, getFlagEmoji } from "../../src/theme/theme";
 import {
-  useSliderSlides,
+  useActiveSliderSlides,
   useSliderRealtime,
 } from "../../src/features/content/api/sliderSlides";
 
@@ -78,7 +79,7 @@ function FadeSlide({
 // ── Carrusel de banners ────────────────────────────────────────
 function WCBanner() {
   const router = useRouter();
-  const { data: slides = [] } = useSliderSlides({ onlyActive: true });
+  const { data: slides = [] } = useActiveSliderSlides();
   useSliderRealtime();
   const flatRef = useRef<FlatList>(null);
   const [active, setActive] = useState(0);
@@ -86,19 +87,17 @@ function WCBanner() {
     Dimensions.get("window").width - 32,
   );
 
-  const activeSlides = slides.filter((s) => s.active);
-
   useEffect(() => {
-    if (activeSlides.length <= 1) return;
+    if (slides.length <= 1) return;
     const id = setInterval(() => {
       setActive((prev) => {
-        const next = (prev + 1) % activeSlides.length;
+        const next = (prev + 1) % slides.length;
         flatRef.current?.scrollToIndex({ index: next, animated: true });
         return next;
       });
     }, 4500);
     return () => clearInterval(id);
-  }, [activeSlides.length]);
+  }, [slides.length]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -113,22 +112,21 @@ function WCBanner() {
 
   const viewConfig = useMemo(() => ({ itemVisiblePercentThreshold: 50 }), []);
 
-  const handlePress = (slide: any) => {
+  const handlePress = (slide: (typeof slides)[number]) => {
     if (slide.button?.internalLink) {
       router.push(slide.button.internalLink as any);
     } else if (slide.button?.externalLink) {
-      // For external links, we'd need Linking, but let's keep it simple for now
-      console.log("External link:", slide.button.externalLink);
+      Linking.openURL(slide.button.externalLink).catch(() => {});
     }
   };
 
-  if (activeSlides.length === 0) return null;
+  if (slides.length === 0) return null;
 
   return (
     <View style={bannerS.wrapper} onLayout={onLayout}>
       <FlatList
         ref={flatRef}
-        data={activeSlides}
+        data={slides}
         horizontal
         pagingEnabled={false}
         showsHorizontalScrollIndicator={false}
@@ -191,7 +189,7 @@ function WCBanner() {
         )}
       />
       <View style={bannerS.dots}>
-        {activeSlides.map((b, i) => (
+        {slides.map((b, i) => (
           <View
             key={i}
             style={[

@@ -11,7 +11,7 @@ import { useUsersStore } from '../../users/store/usersStore';
 import { useNewsStore } from '../../content/store/newsStore';
 import { useRewardsStore } from '../../content/store/rewardsStore';
 import { useImageAssetsStore } from '../../content/store/imageAssetsStore';
-import { useSliderStore } from '../../content/store/sliderStore';
+import { useAllSliderSlides } from '../../content/api/sliderSlides';
 import { useAdminActivityStore } from '../store/adminActivityStore';
 
 type ReportKind = 'Resumen' | 'Usuarios' | 'Noticias' | 'Premios' | 'Imágenes' | 'Slider';
@@ -70,7 +70,7 @@ export function ReportsScreen() {
   const news = useNewsStore((s) => s.items);
   const rewards = useRewardsStore((s) => s.rewards);
   const images = useImageAssetsStore((s) => s.assets);
-  const slides = useSliderStore((s) => s.slides);
+  const { data: slides = [] } = useAllSliderSlides();
 
   const [kind, setKind] = useState<ReportKind>('Resumen');
   const [exporting, setExporting] = useState(false);
@@ -84,7 +84,7 @@ export function ReportsScreen() {
     const activeUsers = users.filter((u) => u.activo).length;
     const publishedNews = news.filter((n) => n.status === 'published').length;
     const activeRewards = rewards.filter((r) => r.status === 'active').length;
-    const activeSlides = slides.filter((s) => s.status === 'active').length;
+    const activeSlides = slides.filter((s) => s.active).length;
     const activeImages = images.filter((a) => a.status === 'active').length;
     return { totalUsers, activeUsers, publishedNews, activeRewards, activeSlides, activeImages };
   }, [images, news, rewards, slides, users]);
@@ -191,12 +191,12 @@ export function ReportsScreen() {
           .map((s) => [
             s.id,
             s.title,
-            s.status,
+            s.active ? 'active' : 'inactive',
             `${s.order}`,
             s.button.enabled ? 'si' : 'no',
             s.button.internalLink ?? '',
             s.button.externalLink ?? '',
-            new Date(s.updatedAt).toLocaleString(),
+            s.updatedAt ? new Date(s.updatedAt).toLocaleString() : new Date(s.createdAt).toLocaleString(),
           ]),
       ];
 

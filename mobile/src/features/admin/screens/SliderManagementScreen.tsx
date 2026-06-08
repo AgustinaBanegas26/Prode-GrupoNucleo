@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -23,10 +24,12 @@ import { useAppTheme } from '../../../providers/ThemeProvider';
 import { radius, shadows, spacing } from '../../../theme/theme';
 import {
   type SliderSlide,
+  useAllSliderSlides,
+  useDeleteSliderImage,
   useDeleteSliderSlide,
   useReorderSliderSlides,
   useSliderRealtime,
-  useSliderSlides,
+  useToggleSliderSlideActive,
   useUpsertSliderSlide,
 } from '../../content/api/sliderSlides';
 import { useAdminActivityStore } from '../store/adminActivityStore';
@@ -237,15 +240,18 @@ export function SliderManagementScreen() {
   const { theme } = useAppTheme();
   const isDark = theme.isDark;
   const router = useRouter();
-  const { data: slides = [] } = useSliderSlides();
+  const { data: slides = [], isLoading, isError, error, refetch } = useAllSliderSlides();
   useSliderRealtime();
-  const upsertMutation  = useUpsertSliderSlide();
-  const deleteMutation  = useDeleteSliderSlide();
-  const reorderMutation = useReorderSliderSlides();
+  const upsertMutation       = useUpsertSliderSlide();
+  const deleteMutation       = useDeleteSliderSlide();
+  const deleteImageMutation  = useDeleteSliderImage();
+  const reorderMutation      = useReorderSliderSlides();
+  const toggleActiveMutation = useToggleSliderSlideActive();
   const log = useAdminActivityStore((s) => s.log);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [form, setForm]                 = useState<SlideForm>(emptyForm(1));
 
   const sorted = useMemo(() => [...slides].sort((a, b) => a.order - b.order), [slides]);
@@ -320,6 +326,7 @@ export function SliderManagementScreen() {
 
     const existed = !!form.id;
     setSaving(true);
+    setUploadProgress(null);
     try {
       await upsertMutation.mutateAsync({
         id: form.id,
@@ -335,6 +342,7 @@ export function SliderManagementScreen() {
         },
         imageUri: form.imageUri,
         imagePath: form.imagePath,
+        onUploadProgress: form.imageUri ? setUploadProgress : undefined,
       });
 
       log({
@@ -348,7 +356,32 @@ export function SliderManagementScreen() {
       Alert.alert('Error al guardar', e instanceof Error ? e.message : 'Intentá de nuevo.');
     } finally {
       setSaving(false);
+      setUploadProgress(null);
     }
+  };
+
+  const handleDeleteImage = () => {
+    if (!form.id || !form.imagePath) {
+      setForm((s) => ({ ...s, imageUri: undefined, imageUrl: undefined, imagePath: undefined }));
+      return;
+    }
+
+    Alert.alert('Eliminar imagen', '¿Querés eliminar la imagen de este slide?', [
+      { text: 'Cancelar' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteImageMutation.mutateAsync({ id: form.id!, imagePath: form.imagePath! });
+            setForm((s) => ({ ...s, imageUri: undefined, imageUrl: undefined, imagePath: undefined }));
+            log({ action: 'update', module: 'slider', title: 'Imagen eliminada', detail: form.title });
+          } catch (e) {
+            Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo eliminar la imagen.');
+          }
+        },
+      },
+    ]);
   };
 
   const confirmDelete = (s: SliderSlide) => {
@@ -376,19 +409,26 @@ export function SliderManagementScreen() {
     const next = [...ids];
     const swap = dir === 'up' ? idx - 1 : idx + 1;
     [next[idx], next[swap]] = [next[swap], next[idx]];
-    reorderMutation.mutate(next);
+    reorderMutation.mutate(next, {
+      onError: (e) => Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo reordenar.'),
+    });
   };
 
   const toggleActive = (s: SliderSlide) => {
-    upsertMutation.mutate({
-      id: s.id,
-      title: s.title,
-      description: s.description,
-      active: !s.active,
-      order: s.order,
-      button: s.button,
-      imagePath: s.imagePath,
-    });
+    toggleActiveMutation.mutate(
+      { id: s.id, active: !s.active },
+      {
+        onSuccess: () => {
+          log({
+            action: 'update',
+            module: 'slider',
+            title: s.active ? 'Slide desactivado' : 'Slide activado',
+            detail: s.title,
+          });
+        },
+        onError: (e) => Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo cambiar el estado.'),
+      },
+    );
   };
 
   const bg = isDark ? '#0D0D0D' : '#F5F7FA';
@@ -420,6 +460,18 @@ export function SliderManagementScreen() {
         keyExtractor={(s) => s.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={scr.listContent}
+        refreshing={isLoading}
+        onRefresh={() => refetch()}
+        ListHeaderComponent={
+          isError ? (
+            <Pressable onPress={() => refetch()} style={[scr.errorBox, { backgroundColor: theme.colors.surfaceAlt }]}>
+              <Text style={[scr.errorText, { color: theme.colors.error }]}>
+                {error instanceof Error ? error.message : 'Error al cargar slides'}
+              </Text>
+              <Text style={[scr.errorHint, { color: theme.colors.muted }]}>Tocá para reintentar</Text>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={scr.emptyBox}>
             <View style={[scr.emptyIcon, { backgroundColor: 'rgba(61,165,245,0.12)' }]}>
@@ -478,6 +530,7 @@ export function SliderManagementScreen() {
               <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Imagen *</Text>
               <Pressable
                 onPress={pickImage}
+                disabled={saving}
                 style={[
                   modal.imagePickerBtn,
                   {
@@ -513,6 +566,35 @@ export function SliderManagementScreen() {
                   </View>
                 )}
               </Pressable>
+
+              {(form.imageUri || form.imageUrl) && (
+                <Pressable
+                  onPress={handleDeleteImage}
+                  disabled={saving || deleteImageMutation.isPending}
+                  style={[modal.deleteImageBtn, { borderColor: theme.colors.error + '40' }]}
+                >
+                  <Feather name="trash-2" size={14} color={theme.colors.error} />
+                  <Text style={[modal.deleteImageText, { color: theme.colors.error }]}>
+                    {deleteImageMutation.isPending ? 'Eliminando...' : 'Eliminar imagen'}
+                  </Text>
+                </Pressable>
+              )}
+
+              {uploadProgress !== null && (
+                <View style={modal.progressBox}>
+                  <View style={[modal.progressTrack, { backgroundColor: theme.colors.border }]}>
+                    <View
+                      style={[
+                        modal.progressFill,
+                        { width: `${uploadProgress}%`, backgroundColor: CELESTE_DARK },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[modal.progressText, { color: theme.colors.textSecondary }]}>
+                    Subiendo imagen… {uploadProgress}%
+                  </Text>
+                </View>
+              )}
 
               {/* Título */}
               <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Título *</Text>
@@ -617,7 +699,12 @@ export function SliderManagementScreen() {
               >
                 <LinearGradient colors={[CELESTE_DARK, DEEP_BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 {saving ? (
-                  <Text style={modal.saveBtnText}>Guardando...</Text>
+                  <View style={modal.savingRow}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={modal.saveBtnText}>
+                      {uploadProgress !== null ? `Subiendo ${uploadProgress}%` : 'Guardando...'}
+                    </Text>
+                  </View>
                 ) : (
                   <>
                     <Feather name="check" size={16} color="#fff" />
@@ -646,6 +733,9 @@ const scr = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,0.68)', fontSize: 12, marginTop: 2 },
   addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
   listContent: { padding: spacing.lg, paddingBottom: 100, gap: spacing.md },
+  errorBox: { padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', gap: 4 },
+  errorText: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  errorHint: { fontSize: 11 },
   emptyBox: { alignItems: 'center', paddingTop: 48, paddingHorizontal: spacing['2xl'], gap: spacing.lg },
   emptyIcon: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
@@ -669,6 +759,12 @@ const modal = StyleSheet.create({
   imagePlaceholder: { alignItems: 'center', gap: 8, padding: spacing.xl },
   imagePlaceholderText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
   imagePlaceholderHint: { fontSize: 12, textAlign: 'center' },
+  deleteImageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.sm, paddingVertical: spacing.sm, borderWidth: 1, borderRadius: radius.lg },
+  deleteImageText: { fontSize: 13, fontWeight: '600' },
+  progressBox: { marginTop: spacing.md, gap: 6 },
+  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg, paddingVertical: spacing.sm },
   switchLabel: { fontSize: 14, fontWeight: '600' },
   switchHint: { fontSize: 11, marginTop: 2 },
@@ -677,5 +773,6 @@ const modal = StyleSheet.create({
   cancelBtn: { flex: 1, height: 48, borderRadius: radius.xl, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cancelText: { fontSize: 14, fontWeight: '700' },
   saveBtn: { flex: 2, height: 48, borderRadius: radius.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  savingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
