@@ -30,7 +30,7 @@ $$ language plpgsql;
 drop trigger if exists trg_image_assets_updated_at on public.image_assets;
 create trigger trg_image_assets_updated_at
 before update on public.image_assets
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 -- Realtime (idempotente)
 do $$
@@ -114,4 +114,5 @@ on storage.objects
 for delete
 to public
 using (bucket_id = 'assets');
+
 

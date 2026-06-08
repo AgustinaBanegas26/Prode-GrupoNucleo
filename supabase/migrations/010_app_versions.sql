@@ -26,7 +26,7 @@ create unique index if not exists app_versions_version_unique_idx on public.app_
 drop trigger if exists trg_app_versions_updated_at on public.app_versions;
 create trigger trg_app_versions_updated_at
 before update on public.app_versions
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 -- Realtime
 do $$
@@ -80,3 +80,4 @@ execute function public.deactivate_other_app_versions();
 insert into public.app_versions (version, version_code, apk_url, force_update, changelog, is_active)
 values ('1.0.0', 1, '', false, 'Versión inicial', true)
 on conflict (version) do nothing;
+

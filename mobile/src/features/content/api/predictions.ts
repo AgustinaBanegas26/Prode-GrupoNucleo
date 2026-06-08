@@ -70,8 +70,6 @@ export function usePredictions(clienteId: string | undefined) {
   });
 }
 
-/** Returns ALL predictions (admin use — count only). */
-
 
 export function useUpsertPrediction() {
   const qc = useQueryClient();

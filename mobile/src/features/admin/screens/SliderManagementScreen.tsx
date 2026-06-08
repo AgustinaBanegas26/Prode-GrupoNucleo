@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -236,7 +237,7 @@ export function SliderManagementScreen() {
   const { theme } = useAppTheme();
   const isDark = theme.isDark;
   const router = useRouter();
-  const { data: slides = [] } = useSliderSlides({ onlyActive: false });
+  const { data: slides = [] } = useSliderSlides();
   useSliderRealtime();
   const upsertMutation  = useUpsertSliderSlide();
   const deleteMutation  = useDeleteSliderSlide();
@@ -272,6 +273,21 @@ export function SliderManagementScreen() {
   };
 
   const pickImage = async () => {
+    if (Platform.OS === 'web') {
+      // En web: usar input type="file" nativo para evitar problemas CORS con blob URIs
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/png,image/webp';
+      input.onchange = async (e: any) => {
+        const file: File = e.target.files?.[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        setForm(s => ({ ...s, imageUri: url, imageUrl: url }));
+      };
+      input.click();
+      return;
+    }
+    // Móvil: usar ImagePicker
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Permiso requerido', 'Necesitamos acceso a la galería.');

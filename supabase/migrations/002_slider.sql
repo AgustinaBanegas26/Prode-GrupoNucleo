@@ -42,7 +42,7 @@ $$ language plpgsql;
 drop trigger if exists trg_slider_slides_updated_at on public.slider_slides;
 create trigger trg_slider_slides_updated_at
 before update on public.slider_slides
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 -- 3) Realtime (para sincronización inmediata admin -> cliente)
 do $$
@@ -79,52 +79,31 @@ create policy "slider_slides_insert_all"
 on public.slider_slides
 for insert
 to authenticated
-with check (auth.role = 'admin');
+with check (auth.role() = 'admin');
 
 drop policy if exists "slider_slides_update_all" on public.slider_slides;
 create policy "slider_slides_update_all"
 on public.slider_slides
 for update
 to authenticated
-using (auth.role = 'admin')
-with check (auth.role = 'admin');
+using (auth.role() = 'admin')
+with check (auth.role() = 'admin');
 
 drop policy if exists "slider_slides_delete_all" on public.slider_slides;
 create policy "slider_slides_delete_all"
 on public.slider_slides
 for delete
 to authenticated
-using (auth.role = 'admin');
+using (auth.role() = 'admin');
 
--- 6) RLS: Storage (bucket sliders)
--- Nota: aplica sobre storage.objects, no sobre buckets.
-alter table storage.objects enable row level security;
-
-drop policy if exists "storage_sliders_select_all" on storage.objects;
-create policy "storage_sliders_select_all"
-on storage.objects
-for select
-to public
-using (bucket_id = 'sliders');
-
-drop policy if exists "storage_sliders_insert_all" on storage.objects;
-create policy "storage_sliders_insert_all"
-on storage.objects
-for insert
-to authenticated
-with check (bucket_id = 'sliders' and auth.role = 'admin');
-
-drop policy if exists "storage_sliders_update_all" on storage.objects;
-create policy "storage_sliders_update_all"
-on storage.objects
-for update
-to authenticated
-using (bucket_id = 'sliders' and auth.role = 'admin')
-with check (bucket_id = 'sliders');
-
-drop policy if exists "storage_sliders_delete_all" on storage.objects;
-create policy "storage_sliders_delete_all"
-on storage.objects
-for delete
-to authenticated
-using (bucket_id = 'sliders');
+-- Storage RLS (comentado: requiere role service_role en Supabase)
+-- Para aplicar estas políticas, usa la consola Supabase > Storage > Policies
+-- o ejecuta desde un client con service_role key.
+-- alter table storage.objects enable row level security;
+-- drop policy if exists "storage_sliders_select_all" on storage.objects;
+-- create policy "storage_sliders_select_all"
+-- on storage.objects
+-- for select
+-- to public
+-- using (bucket_id = 'sliders');
+-- ... etc

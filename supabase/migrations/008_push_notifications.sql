@@ -49,7 +49,7 @@ $$ language plpgsql;
 drop trigger if exists trg_push_tokens_updated_at on public.push_tokens;
 create trigger trg_push_tokens_updated_at
 before update on public.push_tokens
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 -- Realtime (idempotente) - útil para que el admin vea historial/estado sin refresh
 do $$
@@ -86,4 +86,5 @@ drop policy if exists "notifications_outbox_update_all" on public.notifications_
 create policy "notifications_outbox_update_all" on public.notifications_outbox for update to public using (true) with check (true);
 drop policy if exists "notifications_outbox_delete_all" on public.notifications_outbox;
 create policy "notifications_outbox_delete_all" on public.notifications_outbox for delete to public using (true);
+
 

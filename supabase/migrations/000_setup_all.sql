@@ -5,6 +5,39 @@
 -- Nota RLS: policies permisivas para que funcione con anon key y login legacy.
 
 -- =====================================================================
+-- Helper: updated_at trigger function (reutilizable)
+-- =====================================================================
+create or replace function public.set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+-- =====================================================================
+-- 001) ADMINS (Legacy)
+-- =====================================================================
+create table if not exists public.admins (
+  id uuid primary key default gen_random_uuid(),
+  usuario text not null unique,
+  email text unique,
+  password_hash text,
+  primer_login boolean not null default true,
+  must_change_password boolean not null default true,
+  habilitado boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists admins_usuario_idx on public.admins(usuario);
+
+drop trigger if exists trg_admins_updated_at on public.admins;
+create trigger trg_admins_updated_at
+before update on public.admins
+for each row execute procedure public.set_updated_at();
+
+-- =====================================================================
 -- 000) USERS
 -- =====================================================================
 create table if not exists public.users (
@@ -27,7 +60,7 @@ create index if not exists users_rol_idx on public.users(rol);
 drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
 before update on public.users
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -71,6 +104,10 @@ create table if not exists public.matches (
   updated_at    timestamptz default now()
 );
 
+-- Asegurar que la columna status existe (para tablas que ya estaban creadas)
+alter table public.matches
+add column if not exists status text not null default 'NS';
+
 create index if not exists matches_status_idx on public.matches(status);
 create index if not exists matches_date_idx on public.matches(match_date);
 
@@ -86,17 +123,6 @@ begin
     alter publication supabase_realtime add table public.matches;
   end if;
 end $$;
-
--- =====================================================================
--- Helper: updated_at trigger function (reutilizable)
--- =====================================================================
-create or replace function public.set_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
 
 -- =====================================================================
 -- 002) SLIDER + BUCKET + RLS + REALTIME
@@ -125,7 +151,7 @@ create index if not exists slider_slides_is_active_idx on public.slider_slides(i
 drop trigger if exists trg_slider_slides_updated_at on public.slider_slides;
 create trigger trg_slider_slides_updated_at
 before update on public.slider_slides
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -148,21 +174,19 @@ alter table public.slider_slides enable row level security;
 drop policy if exists "slider_slides_select_all" on public.slider_slides;
 create policy "slider_slides_select_all" on public.slider_slides for select to public using (true);
 drop policy if exists "slider_slides_insert_all" on public.slider_slides;
-create policy "slider_slides_insert_all" on public.slider_slides for insert to authenticated with check (auth.role = 'admin');
+create policy "slider_slides_insert_all" on public.slider_slides for insert to authenticated with check (auth.role() = 'admin');
 drop policy if exists "slider_slides_update_all" on public.slider_slides;
-create policy "slider_slides_update_all" on public.slider_slides for update to authenticated using (auth.role = 'admin') with check (auth.role = 'admin');
+create policy "slider_slides_update_all" on public.slider_slides for update to authenticated using (auth.role() = 'admin') with check (auth.role() = 'admin');
 drop policy if exists "slider_slides_delete_all" on public.slider_slides;
-create policy "slider_slides_delete_all" on public.slider_slides for delete to authenticated using (auth.role = 'admin');
+create policy "slider_slides_delete_all" on public.slider_slides for delete to authenticated using (auth.role() = 'admin');
 
-alter table storage.objects enable row level security;
-drop policy if exists "storage_sliders_select_all" on storage.objects;
-create policy "storage_sliders_select_all" on storage.objects for select to public using (bucket_id = 'sliders');
-drop policy if exists "storage_sliders_insert_all" on storage.objects;
-create policy "storage_sliders_insert_all" on storage.objects for insert to authenticated with check (bucket_id = 'sliders' and auth.role = 'admin');
-drop policy if exists "storage_sliders_update_all" on storage.objects;
-create policy "storage_sliders_update_all" on storage.objects for update to authenticated using (bucket_id = 'sliders' and auth.role = 'admin') with check (bucket_id = 'sliders');
-drop policy if exists "storage_sliders_delete_all" on storage.objects;
-create policy "storage_sliders_delete_all" on storage.objects for delete to authenticated using (bucket_id = 'sliders');
+-- Storage RLS (comentado: requiere role service_role en Supabase)
+-- Para aplicar estas políticas, usa la consola Supabase > Storage > Policies
+-- o ejecuta desde un client con service_role key.
+-- alter table storage.objects enable row level security;
+-- drop policy if exists "storage_sliders_select_all" on storage.objects;
+-- create policy "storage_sliders_select_all" on storage.objects for select to public using (bucket_id = 'sliders');
+-- ... etc
 
 -- =====================================================================
 -- 003) NEWS + BUCKET + RLS + REALTIME
@@ -184,7 +208,7 @@ create index if not exists news_published_at_idx on public.news(published_at des
 drop trigger if exists trg_news_updated_at on public.news;
 create trigger trg_news_updated_at
 before update on public.news
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 create or replace function public.news_set_published_at()
 returns trigger as $$
@@ -231,14 +255,9 @@ create policy "news_update_all" on public.news for update to public using (true)
 drop policy if exists "news_delete_all" on public.news;
 create policy "news_delete_all" on public.news for delete to public using (true);
 
-drop policy if exists "storage_news_select_all" on storage.objects;
-create policy "storage_news_select_all" on storage.objects for select to public using (bucket_id = 'news');
-drop policy if exists "storage_news_insert_all" on storage.objects;
-create policy "storage_news_insert_all" on storage.objects for insert to public with check (bucket_id = 'news');
-drop policy if exists "storage_news_update_all" on storage.objects;
-create policy "storage_news_update_all" on storage.objects for update to public using (bucket_id = 'news') with check (bucket_id = 'news');
-drop policy if exists "storage_news_delete_all" on storage.objects;
-create policy "storage_news_delete_all" on storage.objects for delete to public using (bucket_id = 'news');
+-- Storage policies (comentado: requiere role service_role)
+-- drop policy if exists "storage_news_select_all" on storage.objects;
+-- create policy "storage_news_select_all" on storage.objects for select to public using (bucket_id = 'news');
 
 -- =====================================================================
 -- 004) REWARDS + BUCKET + RLS + REALTIME
@@ -262,7 +281,7 @@ create index if not exists rewards_sort_order_idx on public.rewards(sort_order);
 drop trigger if exists trg_rewards_updated_at on public.rewards;
 create trigger trg_rewards_updated_at
 before update on public.rewards
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -291,14 +310,7 @@ create policy "rewards_update_all" on public.rewards for update to public using 
 drop policy if exists "rewards_delete_all" on public.rewards;
 create policy "rewards_delete_all" on public.rewards for delete to public using (true);
 
-drop policy if exists "storage_rewards_select_all" on storage.objects;
-create policy "storage_rewards_select_all" on storage.objects for select to public using (bucket_id = 'rewards');
-drop policy if exists "storage_rewards_insert_all" on storage.objects;
-create policy "storage_rewards_insert_all" on storage.objects for insert to public with check (bucket_id = 'rewards');
-drop policy if exists "storage_rewards_update_all" on storage.objects;
-create policy "storage_rewards_update_all" on storage.objects for update to public using (bucket_id = 'rewards') with check (bucket_id = 'rewards');
-drop policy if exists "storage_rewards_delete_all" on storage.objects;
-create policy "storage_rewards_delete_all" on storage.objects for delete to public using (bucket_id = 'rewards');
+-- Storage policies (comentado: requiere role service_role)
 
 -- =====================================================================
 -- 005) EVENTS + BUCKET + RLS + REALTIME
@@ -322,7 +334,7 @@ create index if not exists events_start_at_idx on public.events(start_at);
 drop trigger if exists trg_events_updated_at on public.events;
 create trigger trg_events_updated_at
 before update on public.events
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -351,14 +363,7 @@ create policy "events_update_all" on public.events for update to public using (t
 drop policy if exists "events_delete_all" on public.events;
 create policy "events_delete_all" on public.events for delete to public using (true);
 
-drop policy if exists "storage_events_select_all" on storage.objects;
-create policy "storage_events_select_all" on storage.objects for select to public using (bucket_id = 'events');
-drop policy if exists "storage_events_insert_all" on storage.objects;
-create policy "storage_events_insert_all" on storage.objects for insert to public with check (bucket_id = 'events');
-drop policy if exists "storage_events_update_all" on storage.objects;
-create policy "storage_events_update_all" on storage.objects for update to public using (bucket_id = 'events') with check (bucket_id = 'events');
-drop policy if exists "storage_events_delete_all" on storage.objects;
-create policy "storage_events_delete_all" on storage.objects for delete to public using (bucket_id = 'events');
+-- Storage policies (comentado: requiere role service_role)
 
 -- =====================================================================
 -- 006) IMAGE ASSETS + BUCKET + RLS + REALTIME
@@ -383,7 +388,7 @@ create index if not exists image_assets_is_active_idx on public.image_assets(is_
 drop trigger if exists trg_image_assets_updated_at on public.image_assets;
 create trigger trg_image_assets_updated_at
 before update on public.image_assets
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -412,14 +417,7 @@ create policy "image_assets_update_all" on public.image_assets for update to pub
 drop policy if exists "image_assets_delete_all" on public.image_assets;
 create policy "image_assets_delete_all" on public.image_assets for delete to public using (true);
 
-drop policy if exists "storage_assets_select_all" on storage.objects;
-create policy "storage_assets_select_all" on storage.objects for select to public using (bucket_id = 'assets');
-drop policy if exists "storage_assets_insert_all" on storage.objects;
-create policy "storage_assets_insert_all" on storage.objects for insert to public with check (bucket_id = 'assets');
-drop policy if exists "storage_assets_update_all" on storage.objects;
-create policy "storage_assets_update_all" on storage.objects for update to public using (bucket_id = 'assets') with check (bucket_id = 'assets');
-drop policy if exists "storage_assets_delete_all" on storage.objects;
-create policy "storage_assets_delete_all" on storage.objects for delete to public using (bucket_id = 'assets');
+-- Storage policies (comentado: requiere role service_role)
 
 -- =====================================================================
 -- 007) PREDICTIONS + RANKING_CACHE + REALTIME + RLS
@@ -442,7 +440,7 @@ create index if not exists predictions_fixture_id_idx on public.predictions(fixt
 drop trigger if exists trg_predictions_updated_at on public.predictions;
 create trigger trg_predictions_updated_at
 before update on public.predictions
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 create table if not exists public.ranking_cache (
   id uuid primary key default gen_random_uuid(),
@@ -535,7 +533,7 @@ create index if not exists notifications_outbox_created_at_idx on public.notific
 drop trigger if exists trg_push_tokens_updated_at on public.push_tokens;
 create trigger trg_push_tokens_updated_at
 before update on public.push_tokens
-for each row execute function public.set_updated_at();
+for each row execute procedure public.set_updated_at();
 
 do $$
 begin
@@ -567,4 +565,5 @@ drop policy if exists "notifications_outbox_update_all" on public.notifications_
 create policy "notifications_outbox_update_all" on public.notifications_outbox for update to public using (true) with check (true);
 drop policy if exists "notifications_outbox_delete_all" on public.notifications_outbox;
 create policy "notifications_outbox_delete_all" on public.notifications_outbox for delete to public using (true);
+
 

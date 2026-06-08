@@ -58,6 +58,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const raw = await AsyncStorage.getItem(SESSION_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as SessionUser;
+
+          // Si la sesión guardada tiene mustChangePassword=true pero la tabla
+          // ya dice primer_login=false, limpiarla para evitar loops
+          if (parsed.mustChangePassword) {
+            // Verificar en Supabase el estado real
+            let stillNeedsChange = true;
+            try {
+              if (parsed.role === 'client' && parsed.cliente_id) {
+                const { data } = await supabase
+                  .from('clientes')
+                  .select('primer_login')
+                  .eq('cliente_id', parsed.cliente_id)
+                  .maybeSingle();
+                stillNeedsChange = data?.primer_login === true;
+              } else if (parsed.role === 'admin' && parsed.usuario) {
+                const { data } = await supabase
+                  .from('admins')
+                  .select('primer_login')
+                  .eq('usuario', parsed.usuario)
+                  .maybeSingle();
+                stillNeedsChange = data?.primer_login === true;
+              }
+            } catch { stillNeedsChange = false; }
+
+            if (!stillNeedsChange) {
+              // Limpiar mustChangePassword de la sesión guardada
+              const fixed = { ...parsed, mustChangePassword: false };
+              await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(fixed));
+              setUser(fixed);
+              setRole(fixed.role);
+              setLoading(false);
+              return;
+            }
+          }
+
           setUser(parsed);
           setRole(parsed.role);
           if (parsed.role === 'admin' && parsed.adminToken) {
