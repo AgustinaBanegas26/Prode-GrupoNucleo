@@ -70,37 +70,64 @@ serve(async (req: Request) => {
 
   const fdUrl = `${FD_BASE}${fdPath}${forwardParams.toString() ? `?${forwardParams}` : ''}`;
 
-  try {
-    const fdRes = await fetch(fdUrl, {
-      headers: {
-        'X-Auth-Token': FD_TOKEN,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const body = await fdRes.text();
-
-    if (!fdRes.ok) {
-      console.error(`[wc-proxy] football-data HTTP ${fdRes.status}:`, body);
-      return new Response(body, {
-        status: fdRes.status,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  const fetchUpstream = async (): Promise<Response> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    try {
+      return await fetch(fdUrl, {
+        signal: controller.signal,
+        headers: {
+          'X-Auth-Token': FD_TOKEN,
+          'Content-Type': 'application/json',
+        },
       });
+    } finally {
+      clearTimeout(timeout);
     }
+  };
 
-    return new Response(body, {
-      status: 200,
-      headers: {
-        ...CORS_HEADERS,
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=120', // cachear 2 minutos
-      },
-    });
-  } catch (e) {
-    console.error('[wc-proxy] fetch error:', e);
-    return new Response(JSON.stringify({ error: 'Upstream fetch failed' }), {
-      status: 502,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
+  const maxAttempts = 3;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const fdRes = await fetchUpstream();
+      const body = await fdRes.text();
+
+      if (!fdRes.ok) {
+        const retryable = fdRes.status === 429 || fdRes.status >= 500;
+        if (retryable && attempt < maxAttempts) {
+          console.warn(`[wc-proxy] football-data HTTP ${fdRes.status} (intento ${attempt}/${maxAttempts})`);
+          await new Promise((r) => setTimeout(r, attempt * 600));
+          continue;
+        }
+        console.error(`[wc-proxy] football-data HTTP ${fdRes.status}:`, body);
+        return new Response(body, {
+          status: fdRes.status,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=120',
+        },
+      });
+    } catch (e) {
+      lastError = e;
+      console.warn(`[wc-proxy] fetch error (intento ${attempt}/${maxAttempts}):`, e);
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, attempt * 600));
+      }
+    }
   }
+
+  console.error('[wc-proxy] upstream agotó reintentos:', lastError);
+  return new Response(JSON.stringify({ error: 'Upstream fetch failed' }), {
+    status: 502,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
 });

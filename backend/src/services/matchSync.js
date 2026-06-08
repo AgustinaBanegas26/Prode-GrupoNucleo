@@ -19,6 +19,8 @@ const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
+const FOOTBALL_DATA_BASE = 'https://api.football-data.org/v4';
+const WC_CODE = 'WC';
 const LEAGUE_ID = 1;
 const SEASON = 2026;
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
@@ -116,6 +118,70 @@ async function fetchFixturesPaged(params) {
   const fixtures = data && Array.isArray(data.response) ? data.response : [];
   const pagingTotal = typeof data?.paging?.total === 'number' ? data.paging.total : 1;
   return { fixtures, pagingTotal };
+}
+
+function toFootballDataRow(match) {
+  const score = match?.score?.fullTime ?? {};
+  return {
+    fixture_id: match.id,
+    home_team: match.homeTeam?.name ?? '',
+    away_team: match.awayTeam?.name ?? '',
+    home_logo: match.homeTeam?.crest ?? null,
+    away_logo: match.awayTeam?.crest ?? null,
+    home_goals: typeof score.home === 'number' ? score.home : null,
+    away_goals: typeof score.away === 'number' ? score.away : null,
+    status: 'FT',
+    match_date: match.utcDate,
+    round: match.stage ?? null,
+    venue: match.venue ?? null,
+    updated_at: nowIso(),
+  };
+}
+
+/**
+ * syncFootballDataFinished():
+ * - Misma fuente que la app móvil (football-data.org)
+ * - IDs compatibles con predictions.fixture_id
+ */
+async function syncFootballDataFinished() {
+  const token = process.env.FOOTBALL_DATA_TOKEN || process.env.EXPO_PUBLIC_FOOTBALL_DATA_TOKEN;
+  if (!token) {
+    log('FOOTBALL_DATA_TOKEN no configurado — omitiendo sync football-data');
+    return { updated: 0 };
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  try {
+    const res = await withRetry(() =>
+      axios.get(`${FOOTBALL_DATA_BASE}/competitions/${WC_CODE}/matches`, {
+        params: { status: 'FINISHED' },
+        headers: { 'X-Auth-Token': token },
+        timeout: 15000,
+      }),
+    );
+
+    const matches = Array.isArray(res?.data?.matches) ? res.data.matches : [];
+    const rows = matches
+      .filter((m) => m?.status === 'FINISHED')
+      .map(toFootballDataRow)
+      .filter((r) => r.fixture_id && r.home_team && r.away_team && r.match_date
+        && r.home_goals != null && r.away_goals != null);
+
+    if (rows.length === 0) {
+      log('0 partidos football-data actualizados');
+      return { updated: 0 };
+    }
+
+    const { error } = await supabase.from('matches').upsert(rows, { onConflict: 'fixture_id' });
+    if (error) throw new Error(`Supabase upsert error: ${error.message}`);
+
+    log(`${rows.length} partidos football-data actualizados`);
+    return { updated: rows.length };
+  } catch (e) {
+    logError('Error en syncFootballDataFinished', e);
+    throw e;
+  }
 }
 
 /**
@@ -267,6 +333,11 @@ function startSyncCron() {
       '*/2 * * * *',
       async () => {
         try {
+          await syncFootballDataFinished();
+        } catch (_) {
+          // error ya logueado en sync
+        }
+        try {
           await syncFinishedMatches();
         } catch (_) {
           // error ya logueado en sync
@@ -296,6 +367,7 @@ function startSyncCron() {
 
 module.exports = {
   startSyncCron,
+  syncFootballDataFinished,
   syncFinishedMatches,
   syncTodayMatches,
   syncAllMatches,

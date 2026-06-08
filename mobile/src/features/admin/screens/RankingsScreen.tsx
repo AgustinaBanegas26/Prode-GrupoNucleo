@@ -9,6 +9,7 @@ import { useRanking, useRankingRealtime } from '../../content/api/ranking';
 import { useScoringConfig, useUpdateScoringConfig } from '../../content/api/scoringConfig';
 import { useAuth } from '../../../providers/AuthProvider';
 import { adminApiFetch } from '../../../lib/backendApi';
+import { useAutoScoringSync } from '../../../hooks/useAutoScoringSync';
 
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
@@ -37,6 +38,7 @@ export function RankingsScreen() {
   const { data: scoring } = useScoringConfig();
   const updateScoring = useUpdateScoringConfig();
   useRankingRealtime();
+  useAutoScoringSync();
 
   const [exactPts, setExactPts] = useState('3');
   const [winnerPts, setWinnerPts] = useState('1');
@@ -147,27 +149,9 @@ export function RankingsScreen() {
           >
             <Text style={s.recalcText}>Guardar tabla</Text>
           </Pressable>
-          <Pressable
-            onPress={async () => {
-              try {
-                if (user?.adminToken) {
-                  await adminApiFetch('/admin/scoring/recalculate', user.adminToken, { method: 'POST', body: '{}' });
-                } else {
-                  const { supabase } = await import('../../../lib/supabase');
-                  const { data: finished } = await supabase.from('matches').select('fixture_id').not('home_goals', 'is', null);
-                  for (const m of finished ?? []) {
-                    await supabase.rpc('calculate_match_scores', { p_fixture_id: m.fixture_id });
-                  }
-                }
-                Alert.alert('✓', 'Ranking recalculado');
-              } catch (e) {
-                Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo recalcular');
-              }
-            }}
-            style={[s.recalcBtn, { backgroundColor: DEEP_BLUE }]}
-          >
-            <Text style={s.recalcText}>Recalcular puntos</Text>
-          </Pressable>
+          <Text style={[s.autoHint, { color: textMuted }]}>
+            Los puntos se actualizan automáticamente desde la API al finalizar cada partido.
+          </Text>
           <Pressable
             onPress={() => {
               Alert.alert(
@@ -251,4 +235,5 @@ const s = StyleSheet.create({
   configInput: { width: 56, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'center', fontWeight: '700' },
   recalcBtn:   { borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
   recalcText:  { color: '#fff', fontWeight: '700', fontSize: 13 },
+  autoHint:    { fontSize: 12, fontWeight: '500', lineHeight: 18, textAlign: 'center' },
 });

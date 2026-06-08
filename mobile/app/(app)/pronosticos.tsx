@@ -21,9 +21,9 @@ import {
 
 import { Screen } from '../../src/components/Screen';
 import { useAllFixtures } from '../../src/hooks/useApiFootball';
-import { usePredictions, useUpsertPrediction } from '../../src/features/content/api/predictions';
+import { usePredictions, usePredictionsRealtime, useUpsertPrediction } from '../../src/features/content/api/predictions';
 import type { NormalizedMatch } from '../../src/services/apiFootball.types';
-import { fixtures } from '../../src/features/mockData';
+import { FOOTBALL_DATA_ERROR_MSG } from '../../src/services/footballData';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
@@ -241,8 +241,9 @@ export default function PronosticosScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('PENDIENTES');
   const [savingId, setSavingId]   = useState<number | null>(null);
 
-  const { data: apiMatches } = useAllFixtures();
+  const { data: apiMatches, isLoading: fixturesLoading, isError: fixturesError, refetch: refetchFixtures } = useAllFixtures();
   const { data: predictions, refetch: refetchPredictions } = usePredictions(user?.cliente_id);
+  usePredictionsRealtime();
   const upsert = useUpsertPrediction();
 
   // Mapa fixture_id → predicción
@@ -259,32 +260,17 @@ export default function PronosticosScreen() {
 
   // Normalizar partidos
   const allMatches: MatchEntry[] = React.useMemo(() => {
-    if (apiMatches && apiMatches.length > 0) {
-      return (apiMatches as NormalizedMatch[]).map((m): MatchEntry => ({
-        id:        String(m.id),
-        fixtureId: m.id,
-        homeTeam:  m.homeTeam,
-        awayTeam:  m.awayTeam,
-        homeCode:  m.homeCode,
-        awayCode:  m.awayCode,
-        homeLogo:  m.homeLogo ?? undefined,
-        awayLogo:  m.awayLogo ?? undefined,
-        group:     m.group ?? undefined,
-        phase:     m.phase,
-        time:      m.time,
-        date:      m.date,
-        isoDate:   m.isoDate,
-        matchDate: new Date(`${m.isoDate}T${m.time}:00`),
-      }));
-    }
-    return fixtures.map((m): MatchEntry => ({
-      id:        m.id,
-      fixtureId: parseInt(m.id, 10) || 0,
+    if (!apiMatches) return [];
+    return (apiMatches as NormalizedMatch[]).map((m): MatchEntry => ({
+      id:        String(m.id),
+      fixtureId: m.id,
       homeTeam:  m.homeTeam,
       awayTeam:  m.awayTeam,
       homeCode:  m.homeCode,
       awayCode:  m.awayCode,
-      group:     m.group,
+      homeLogo:  m.homeLogo ?? undefined,
+      awayLogo:  m.awayLogo ?? undefined,
+      group:     m.group ?? undefined,
       phase:     m.phase,
       time:      m.time,
       date:      m.date,
@@ -373,7 +359,23 @@ export default function PronosticosScreen() {
           </Text>
         </View>
 
-        {sections.length === 0 ? (
+        {fixturesLoading ? (
+          <View style={scr.empty}>
+            <ActivityIndicator size="large" color={CELESTE_DARK} />
+            <Text style={[scr.emptyTitle, { color: theme.colors.muted }]}>Cargando partidos…</Text>
+          </View>
+        ) : fixturesError ? (
+          <View style={scr.empty}>
+            <Text style={scr.emptyEmoji}>⚠️</Text>
+            <Text style={[scr.emptyTitle, { color: theme.colors.text }]}>{FOOTBALL_DATA_ERROR_MSG}</Text>
+            <Pressable
+              onPress={() => refetchFixtures()}
+              style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: CELESTE_DARK }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Reintentar</Text>
+            </Pressable>
+          </View>
+        ) : sections.length === 0 ? (
           <View style={scr.empty}>
             <Text style={scr.emptyEmoji}>{activeTab === 'COMPLETADOS' ? '🎯' : '⚽'}</Text>
             <Text style={[scr.emptyTitle, { color: theme.colors.text }]}>

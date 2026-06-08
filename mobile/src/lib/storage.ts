@@ -56,102 +56,124 @@ export function getPublicUrl(bucket: string, path: string): string {
   return data.publicUrl;
 }
 
-async function uriToUploadBody(uri: string): Promise<{ body: Blob | ArrayBuffer; contentType: string }> {
-  if (Platform.OS === 'web') {
-    const res = await fetch(uri);
+const SLIDER_BUCKET = 'sliders';
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+function getSupabaseConfig() {
+  return {
+    url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+    anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  };
+}
+
+function isRlsUploadError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('row-level security')
+    || lower.includes('unauthorized')
+    || lower.includes('permission')
+    || lower.includes('403')
+  );
+}
+
+async function uploadViaSliderEdgeFunction(
+  path: string,
+  body: Blob | ArrayBuffer,
+  contentType: string,
+  onProgress?: UploadProgressCallback,
+): Promise<UploadImageResult> {
+  const { url, anonKey } = getSupabaseConfig();
+  if (!url || !anonKey) {
+    throw new Error('Falta configuración de Supabase en la app.');
+  }
+
+  onProgress?.(20);
+  const endpoint = `${url}/functions/v1/slider-upload?path=${encodeURIComponent(path)}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${anonKey}`,
+        apikey: anonKey,
+        'Content-Type': contentType,
+      },
+      body,
+      signal: controller.signal,
+    });
+
+    onProgress?.(85);
+
+    const raw = await res.text();
     if (!res.ok) {
-      throw new Error('No se pudo cargar la imagen desde la URI.');
+      let message = `Error subiendo imagen (${res.status})`;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.error) message = parsed.error;
+      } catch {
+        if (raw) message = raw;
+      }
+      if (res.status === 404) {
+        throw new Error(
+          'Función slider-upload no desplegada. Ejecutá: npx supabase functions deploy slider-upload --no-verify-jwt',
+        );
+      }
+      throw new Error(message);
     }
 
-    const contentTypeHeader = res.headers.get('content-type') ?? '';
-    const ext = extensionFromContentType(contentTypeHeader) ?? guessFileExt(uri);
-    if (!ext) {
-      throw new Error('Formato de imagen no válido. Usa jpg, jpeg, png o webp.');
+    const parsed = JSON.parse(raw) as { publicUrl?: string; path?: string };
+    if (!parsed.publicUrl) {
+      throw new Error('La subida no devolvió una URL pública.');
     }
 
+    onProgress?.(100);
+    return { bucket: SLIDER_BUCKET, path: parsed.path ?? path, publicUrl: parsed.publicUrl };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al subir la imagen.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchUriBody(uri: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  try {
+    const res = await fetch(uri, { signal: controller.signal });
+    return res;
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al leer la imagen.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function uriToUploadBody(uri: string): Promise<{ body: Blob | ArrayBuffer; contentType: string }> {
+  const res = await fetchUriBody(uri);
+  if (!res.ok) {
+    throw new Error('No se pudo cargar la imagen seleccionada.');
+  }
+
+  const contentTypeHeader = res.headers.get('content-type') ?? '';
+  const ext = extensionFromContentType(contentTypeHeader) ?? guessFileExt(uri) ?? 'jpg';
+
+  if (Platform.OS === 'web') {
     const arrayBuffer = await res.arrayBuffer();
     validateImageSize(arrayBuffer);
     return { body: arrayBuffer, contentType: contentTypeHeader || contentTypeForExt(ext) };
   }
 
-  const res = await fetch(uri);
-  if (!res.ok) {
-    throw new Error('No se pudo cargar la imagen desde la URI.');
-  }
-
   const blob = await res.blob();
-  const ext = extensionFromContentType(blob.type) ?? guessFileExt(uri);
-  if (!ext) {
-    throw new Error('Formato de imagen no válido. Usa jpg, jpeg, png o webp.');
-  }
-
   validateImageSize(blob);
   return { body: blob, contentType: blob.type || contentTypeForExt(ext) };
-}
-
-function getStorageAuthHeaders(): Record<string, string> {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-  const headers: Record<string, string> = {
-    apikey: supabaseAnonKey,
-  };
-
-  const restHeaders = (supabase as { rest?: { headers?: Record<string, string> } }).rest?.headers;
-  const authHeader = restHeaders?.Authorization;
-  if (authHeader) {
-    headers.Authorization = authHeader;
-  } else {
-    headers.Authorization = `Bearer ${supabaseAnonKey}`;
-  }
-
-  return { supabaseUrl, ...headers } as Record<string, string> & { supabaseUrl: string };
-}
-
-function uploadWithProgress(
-  url: string,
-  headers: Record<string, string>,
-  body: Blob | ArrayBuffer,
-  contentType: string,
-  onProgress?: UploadProgressCallback,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-
-    Object.entries(headers).forEach(([key, value]) => {
-      if (key !== 'supabaseUrl') xhr.setRequestHeader(key, value);
-    });
-    xhr.setRequestHeader('Content-Type', contentType);
-    xhr.setRequestHeader('x-upsert', 'true');
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress?.(100);
-        resolve();
-      } else {
-        let message = `Error subiendo imagen (${xhr.status})`;
-        try {
-          const parsed = JSON.parse(xhr.responseText);
-          if (parsed?.message) message = parsed.message;
-          if (parsed?.error) message = parsed.error;
-        } catch {
-          // ignore parse errors
-        }
-        reject(new Error(message));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error('Error de red al subir la imagen'));
-    xhr.onabort = () => reject(new Error('Carga de imagen cancelada'));
-
-    xhr.send(body);
-  });
 }
 
 export async function uploadImageFromUri(opts: {
@@ -164,26 +186,63 @@ export async function uploadImageFromUri(opts: {
 
   onProgress?.(0);
   const { body, contentType } = await uriToUploadBody(uri);
-  onProgress?.(15);
+  onProgress?.(10);
 
-  if (onProgress) {
-    const auth = getStorageAuthHeaders();
-    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-    const url = `${auth.supabaseUrl}/storage/v1/object/${bucket}/${encodedPath}`;
-    const { supabaseUrl: _, ...headers } = auth;
-    await uploadWithProgress(url, headers, body, contentType, (pct) => {
-      onProgress(Math.min(99, 15 + Math.round(pct * 0.85)));
-    });
-  } else {
+  // Slider: Edge Function primero (service_role, no requiere políticas en storage.objects).
+  if (bucket === SLIDER_BUCKET) {
+    try {
+      return await uploadViaSliderEdgeFunction(path, body, contentType, onProgress);
+    } catch (edgeError) {
+      const edgeMsg = edgeError instanceof Error ? edgeError.message : String(edgeError);
+      const edgeMissing = edgeMsg.includes('no desplegada') || edgeMsg.includes('404');
+      if (!edgeMissing) throw edgeError;
+      onProgress?.(15);
+    }
+  }
+
+  try {
     const { error } = await supabase.storage.from(bucket).upload(path, body, {
       upsert: true,
       contentType,
     });
     if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
+    onProgress?.(100);
+    return { bucket, path, publicUrl: getPublicUrl(bucket, path) };
+  } catch (directError) {
+    const message = directError instanceof Error ? directError.message : String(directError);
+    if (bucket === SLIDER_BUCKET && isRlsUploadError(message)) {
+      throw new Error(
+        'No se pudo subir la imagen. Desplegá la función slider-upload: npx supabase functions deploy slider-upload --no-verify-jwt',
+      );
+    }
+    throw directError;
   }
+}
 
-  onProgress?.(100);
-  return { bucket, path, publicUrl: getPublicUrl(bucket, path) };
+async function deleteViaSliderEdgeFunction(path: string): Promise<void> {
+  const { url, anonKey } = getSupabaseConfig();
+  if (!url || !anonKey) throw new Error('Falta configuración de Supabase en la app.');
+
+  const endpoint = `${url}/functions/v1/slider-upload?path=${encodeURIComponent(path)}`;
+  const res = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      apikey: anonKey,
+    },
+  });
+
+  if (!res.ok) {
+    const raw = await res.text();
+    let message = `Error eliminando imagen (${res.status})`;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      if (raw) message = raw;
+    }
+    throw new Error(message);
+  }
 }
 
 export async function deleteStorageObject(opts: {
@@ -193,6 +252,22 @@ export async function deleteStorageObject(opts: {
   const { bucket, paths } = opts;
   const validPaths = paths.filter(Boolean);
   if (!validPaths.length) return;
+
+  if (bucket === SLIDER_BUCKET) {
+    for (const path of validPaths) {
+      try {
+        await deleteViaSliderEdgeFunction(path);
+      } catch (edgeError) {
+        const { error } = await supabase.storage.from(bucket).remove([path]);
+        if (error) {
+          const edgeMsg = edgeError instanceof Error ? edgeError.message : String(edgeError);
+          throw new Error(edgeMsg || error.message);
+        }
+      }
+    }
+    return;
+  }
+
   const { error } = await supabase.storage.from(bucket).remove(validPaths);
   if (error) throw new Error(`Error eliminando archivo: ${error.message}`);
 }

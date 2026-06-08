@@ -24,13 +24,29 @@ const CELESTE_DARK = '#3DA5F5';
 
 type RankingEntry = {
   id: string;
+  clienteId: string;
   position: number;
   name: string;
+  avatarUrl: string | null;
   points: number;
   played: number;
-  diff: number;        // correct_exact
+  diff: number;
   isCurrent: boolean;
 };
+
+async function fetchAvatarMap(clienteIds: string[]): Promise<Record<string, string | null>> {
+  if (!clienteIds.length) return {};
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('cliente_id, avatar_url')
+    .in('cliente_id', clienteIds);
+  if (error) throw new Error(error.message);
+  const map: Record<string, string | null> = {};
+  for (const row of data ?? []) {
+    map[String(row.cliente_id)] = row.avatar_url ?? null;
+  }
+  return map;
+}
 
 function useRankingFromSupabase() {
   const { user } = useAuth();
@@ -42,7 +58,6 @@ function useRankingFromSupabase() {
     setLoading(true);
     setError(null);
     try {
-      // Leer directamente de la tabla ranking (calculada por score_prediction)
       const { data: rows, error: err } = await supabase
         .from('ranking')
         .select('id, cliente_id, nombre, total_points, total_played, correct_exact, correct_winner, position')
@@ -50,15 +65,23 @@ function useRankingFromSupabase() {
 
       if (err) throw new Error(err.message);
 
-      const entries: RankingEntry[] = (rows ?? []).map((r, i) => ({
-        id:        r.id ?? r.cliente_id,
-        position:  r.position ?? i + 1,
-        name:      r.nombre ?? `Cliente ${r.cliente_id}`,
-        points:    r.total_points   ?? 0,
-        played:    r.total_played   ?? 0,
-        diff:      r.correct_exact  ?? 0,
-        isCurrent: String(r.cliente_id) === String(user?.cliente_id),
-      }));
+      const clienteIds = (rows ?? []).map((r) => String(r.cliente_id));
+      const avatars = await fetchAvatarMap(clienteIds);
+
+      const entries: RankingEntry[] = (rows ?? []).map((r, i) => {
+        const clienteId = String(r.cliente_id);
+        return {
+          id:        String(r.id ?? r.cliente_id),
+          clienteId,
+          position:  r.position ?? i + 1,
+          name:      r.nombre ?? `Cliente ${r.cliente_id}`,
+          avatarUrl: avatars[clienteId] ?? null,
+          points:    r.total_points   ?? 0,
+          played:    r.total_played   ?? 0,
+          diff:      r.correct_exact  ?? 0,
+          isCurrent: clienteId === String(user?.cliente_id),
+        };
+      });
 
       setData(entries);
     } catch (e: any) {
@@ -70,11 +93,33 @@ function useRankingFromSupabase() {
 
   useEffect(() => { fetch(); }, [user?.cliente_id]);
 
-  // Realtime
   useEffect(() => {
     const ch = supabase
       .channel('ranking-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking' }, fetch)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel('ranking-clientes-avatars')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'clientes' },
+        (payload) => {
+          const row = payload.new as { cliente_id?: string; avatar_url?: string | null };
+          if (!row?.cliente_id) return;
+          const clienteId = String(row.cliente_id);
+          setData((prev) =>
+            prev.map((entry) =>
+              entry.clienteId === clienteId
+                ? { ...entry, avatarUrl: row.avatar_url ?? null }
+                : entry,
+            ),
+          );
+        },
+      )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
@@ -146,6 +191,7 @@ export default function RankingsScreen() {
                   <PremiumRankingCard
                     item={{
                       ...item,
+                      avatarUrl:          item.avatarUrl,
                       variation:          item.diff,
                       variationDirection: item.diff > 0 ? 'up' : item.diff < 0 ? 'down' : 'neutral',
                     }}

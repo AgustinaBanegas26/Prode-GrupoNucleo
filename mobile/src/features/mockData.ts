@@ -34,6 +34,7 @@ export type PositionItem = {
   played: number;
   diff: number;
   isCurrent?: boolean;
+  avatarUrl?: string | null;
 };
 
 export type PredictionItem = {

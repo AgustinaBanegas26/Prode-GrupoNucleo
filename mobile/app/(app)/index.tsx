@@ -7,6 +7,7 @@ import React, {
   useMemo,
 } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -23,8 +24,8 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Screen } from "../../src/components/Screen";
-import { getUpcomingMatches } from "../../src/features/mockData";
 import { useUpcomingMatches } from "../../src/hooks/useApiFootball";
+import { FOOTBALL_DATA_ERROR_MSG } from "../../src/services/footballData";
 import type { NormalizedMatch } from "../../src/services/apiFootball.types";
 import { useAppTheme } from "../../src/providers/ThemeProvider";
 import { useAuth } from "../../src/providers/AuthProvider";
@@ -79,13 +80,31 @@ function FadeSlide({
 // ── Carrusel de banners ────────────────────────────────────────
 function WCBanner() {
   const router = useRouter();
-  const { data: slides = [] } = useActiveSliderSlides();
+  const { theme } = useAppTheme();
+  const {
+    data: slides = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useActiveSliderSlides();
   useSliderRealtime();
   const flatRef = useRef<FlatList>(null);
   const [active, setActive] = useState(0);
   const [itemWidth, setItemWidth] = useState(
     Dimensions.get("window").width - 32,
   );
+
+  const slideKey = useMemo(
+    () => slides.map((s) => `${s.id}:${s.imageUrl}`).join("|"),
+    [slides],
+  );
+
+  useEffect(() => {
+    setActive(0);
+    if (slides.length > 0) {
+      flatRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [slideKey, slides.length]);
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -120,13 +139,44 @@ function WCBanner() {
     }
   };
 
-  if (slides.length === 0) return null;
+  if (isLoading) {
+    return (
+      <View style={[bannerS.stateBox, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <ActivityIndicator color={CELESTE} />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={[bannerS.stateBox, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <Text style={[bannerS.stateText, { color: theme.colors.muted }]}>
+          No se pudieron cargar los banners.
+        </Text>
+        <Pressable onPress={() => refetch()} style={bannerS.retryBtn}>
+          <Text style={bannerS.retryText}>Reintentar</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (slides.length === 0) {
+    return (
+      <View style={[bannerS.stateBox, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <Ionicons name="images-outline" size={28} color={theme.colors.muted} />
+        <Text style={[bannerS.stateText, { color: theme.colors.muted }]}>
+          Sin banners por ahora
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={bannerS.wrapper} onLayout={onLayout}>
       <FlatList
         ref={flatRef}
         data={slides}
+        extraData={slideKey}
         horizontal
         pagingEnabled={false}
         showsHorizontalScrollIndicator={false}
@@ -148,6 +198,7 @@ function WCBanner() {
           >
             <View style={bannerS.gradient}>
               <Image
+                key={item.imageUrl}
                 source={{ uri: item.imageUrl }}
                 style={StyleSheet.absoluteFill}
                 resizeMode="cover"
@@ -209,6 +260,21 @@ function WCBanner() {
 
 const bannerS = StyleSheet.create({
   wrapper: { marginBottom: 8 },
+  stateBox: {
+    height: BANNER_H,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  stateText: { fontSize: 14, fontWeight: "600" },
+  retryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: CELESTE + "30",
+  },
+  retryText: { color: CELESTE_DARK, fontWeight: "700", fontSize: 13 },
   bannerItem: { overflow: "hidden", borderRadius: 22 },
   gradient: {
     height: BANNER_H,
@@ -588,36 +654,27 @@ export default function AppHomeScreen() {
   const initials = (user.nombre ?? "U").substring(0, 2).toUpperCase();
   const bg = theme.isDark ? "#0D0D0D" : "#F5F7FA";
 
-  // Datos de la API — con fallback al mockData si no hay respuesta
-  const { data: apiMatches } = useUpcomingMatches(3);
+  const {
+    data: apiMatches,
+    isLoading: upcomingLoading,
+    isError: upcomingError,
+    refetch: refetchUpcoming,
+  } = useUpcomingMatches(3);
   const upcoming: UpcomingMatch[] = React.useMemo(() => {
-    if (apiMatches && apiMatches.length > 0) {
-      return apiMatches.map(m => ({
-        id:        String(m.id),
-        homeTeam:  m.homeTeam,
-        awayTeam:  m.awayTeam,
-        homeCode:  m.homeCode,
-        awayCode:  m.awayCode,
-        homeLogo:  m.homeLogo || undefined,
-        awayLogo:  m.awayLogo || undefined,
-        group:     m.group ?? undefined,
-        phase:     m.phase,
-        time:      m.time,
-        date:      m.date,
-        stadium:   m.stadium,
-      }));
-    }
-    return getUpcomingMatches(3).map(m => ({
-      id:       m.id,
-      homeTeam: m.homeTeam,
-      awayTeam: m.awayTeam,
-      homeCode: m.homeCode,
-      awayCode: m.awayCode,
-      group:    m.group,
-      phase:    m.phase,
-      time:     m.time,
-      date:     m.date,
-      stadium:  m.stadium,
+    if (!apiMatches) return [];
+    return apiMatches.map(m => ({
+      id:        String(m.id),
+      homeTeam:  m.homeTeam,
+      awayTeam:  m.awayTeam,
+      homeCode:  m.homeCode,
+      awayCode:  m.awayCode,
+      homeLogo:  m.homeLogo || undefined,
+      awayLogo:  m.awayLogo || undefined,
+      group:     m.group ?? undefined,
+      phase:     m.phase,
+      time:      m.time,
+      date:      m.date,
+      stadium:   m.stadium,
     }));
   }, [apiMatches]);
 
@@ -722,18 +779,28 @@ export default function AppHomeScreen() {
                 </Text>
               </Pressable>
             </View>
-            {upcoming.map((m) => (
-              <UpcomingMatchCard
-                key={m.id}
-                match={m}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(app)/details/detalle-partido",
-                    params: { matchId: m.id },
-                  })
-                }
-              />
-            ))}
+            {upcomingLoading ? (
+              <Text style={[sec.link, { color: theme.colors.muted }]}>Cargando partidos…</Text>
+            ) : upcomingError ? (
+              <View style={{ gap: 8, alignItems: 'center', paddingVertical: 12 }}>
+                <Text style={{ color: theme.colors.muted, textAlign: 'center' }}>
+                  {FOOTBALL_DATA_ERROR_MSG}
+                </Text>
+                <Pressable onPress={() => refetchUpcoming()} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: CELESTE_DARK }}>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Reintentar</Text>
+                </Pressable>
+              </View>
+            ) : upcoming.length === 0 ? (
+              <Text style={[sec.link, { color: theme.colors.muted }]}>Sin partidos próximos</Text>
+            ) : (
+              upcoming.map((m) => (
+                <UpcomingMatchCard
+                  key={m.id}
+                  match={m}
+                  onPress={() => router.push("/(app)/pronosticos")}
+                />
+              ))
+            )}
           </FadeSlide>
         </View>
       </ScrollView>

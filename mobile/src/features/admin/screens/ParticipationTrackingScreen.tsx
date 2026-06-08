@@ -84,12 +84,26 @@ export function ParticipationTrackingScreen() {
   useEffect(() => { refreshUsers(); }, [refreshUsers]);
 
   const stats = useMemo(() => {
-    const totalUsers   = users.length;
-    const activeUsers  = users.filter((u) => u.activo).length;
+    const totalUsers = users.length;
+    const loggedInUsers = users.filter((u) => u.ultimoAcceso != null);
+    const activeUsers = users.filter((u) => u.activo).length;
     const blockedUsers = users.filter((u) => !u.activo).length;
+    const predictionClienteIds = new Set(allPredictions.map((p) => String(p.cliente_id)));
+    const participatingUsers = loggedInUsers.filter((u) => predictionClienteIds.has(String(u.clienteId)));
     const predictionsCount = allPredictions.length;
-    const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
-    return { totalUsers, activeUsers, blockedUsers, predictionsCount, participationPct };
+    const participationPct =
+      loggedInUsers.length > 0
+        ? Math.round((participatingUsers.length / loggedInUsers.length) * 100)
+        : 0;
+    return {
+      totalUsers,
+      loggedInUsers: loggedInUsers.length,
+      participatingUsers: participatingUsers.length,
+      activeUsers,
+      blockedUsers,
+      predictionsCount,
+      participationPct,
+    };
   }, [users, allPredictions]);
 
   const bg      = isDark ? '#0D0D0D' : '#F5F7FA';
@@ -138,7 +152,7 @@ export function ParticipationTrackingScreen() {
             </View>
             <View style={s.bigRow}>
               <Text style={[s.bigNum, { color: VERDE }]}>{stats.participationPct}%</Text>
-              <Text style={[s.bigSub, { color: subC }]}>{stats.activeUsers} de {stats.totalUsers} habilitados</Text>
+              <Text style={[s.bigSub, { color: subC }]}>{stats.participatingUsers} de {stats.loggedInUsers} con acceso al sistema</Text>
             </View>
             <AnimatedProgress value={stats.participationPct} color1={VERDE} color2={DORADO} isDark={isDark} />
           </View>
@@ -154,7 +168,7 @@ export function ParticipationTrackingScreen() {
               <Text style={[s.bigNum, { color: '#38bdf8' }]}>{stats.predictionsCount}</Text>
               <Text style={[s.bigSub, { color: subC }]}>Total acumulado</Text>
             </View>
-            <AnimatedProgress value={Math.min((stats.predictionsCount / Math.max(stats.totalUsers * 10, 1)) * 100, 100)} color1="#38bdf8" color2="#6366f1" isDark={isDark} />
+            <AnimatedProgress value={Math.min((stats.predictionsCount / Math.max(stats.loggedInUsers * 10, 1)) * 100, 100)} color1="#38bdf8" color2="#6366f1" isDark={isDark} />
           </View>
         </FadeSlide>
       </View>

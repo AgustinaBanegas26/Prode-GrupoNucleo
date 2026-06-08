@@ -6,11 +6,22 @@
 // Plan free: 10 req/min, datos de World Cup incluidos
 // ─────────────────────────────────────────────────────────────
 
+import { Platform } from 'react-native';
+
 import type { NormalizedMatch, NormalizedGroup, NormalizedStanding } from './apiFootball.types';
 import type { MatchStatusShort } from './apiFootball.types';
 
 const BASE   = 'https://api.football-data.org/v4';
 const WC_CODE = 'WC';
+
+export const FOOTBALL_DATA_ERROR_MSG = 'No se pudo cargar la información';
+
+export class FootballDataError extends Error {
+  constructor(message = FOOTBALL_DATA_ERROR_MSG) {
+    super(message);
+    this.name = 'FootballDataError';
+  }
+}
 
 function getToken(): string {
   return process.env.EXPO_PUBLIC_FOOTBALL_DATA_TOKEN ?? '';
@@ -20,10 +31,20 @@ function getSupabaseUrl(): string {
   return process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 }
 
+function getSupabaseAnonKey(): string {
+  return process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+}
+
 // En web el browser bloquea CORS hacia football-data.org.
 // Usamos la Supabase Edge Function como proxy.
 function isWebPlatform(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined';
+  return Platform.OS === 'web';
+}
+
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildProxyUrl(fdPath: string, params?: Record<string, string>): string {
@@ -40,45 +61,71 @@ function buildDirectUrl(fdPath: string, params?: Record<string, string>): string
 }
 
 // ── Fetch base ────────────────────────────────────────────────
-async function fdFetch<T>(path: string, params?: Record<string, string>): Promise<T | null> {
+async function fdFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const token     = getToken();
   const onWeb     = isWebPlatform();
   const supaUrl   = getSupabaseUrl();
 
-  // En web necesitamos el proxy; si no hay Supabase URL configurada, fallback a null
   if (onWeb && !supaUrl) {
     console.warn('[football-data] En web se necesita EXPO_PUBLIC_SUPABASE_URL para el proxy');
-    return null;
+    throw new FootballDataError();
   }
 
   if (!token && !onWeb) {
     console.warn('[football-data] Token no configurado en EXPO_PUBLIC_FOOTBALL_DATA_TOKEN');
-    return null;
+    throw new FootballDataError();
   }
 
   const url     = onWeb ? buildProxyUrl(path, params) : buildDirectUrl(path, params);
-  const headers: Record<string, string> = onWeb
-    ? { 'Content-Type': 'application/json' }          // proxy no necesita token en el header
-    : { 'X-Auth-Token': token, 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  try {
-    const res = await fetch(url, { headers });
-
-    if (res.status === 429) {
-      console.warn('[football-data] Rate limit alcanzado (10 req/min en plan free)');
-      return null;
+  if (onWeb) {
+    const anonKey = getSupabaseAnonKey();
+    if (anonKey) {
+      headers.apikey = anonKey;
+      headers.Authorization = `Bearer ${anonKey}`;
     }
-    if (!res.ok) {
-      const body = await res.text();
-      console.error(`[football-data] HTTP ${res.status}:`, body);
-      return null;
-    }
-
-    return (await res.json()) as T;
-  } catch (e) {
-    console.error('[football-data] Error de red:', e);
-    return null;
+  } else {
+    headers['X-Auth-Token'] = token;
   }
+
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { headers });
+
+      if (RETRYABLE_STATUSES.has(res.status) && attempt < maxAttempts) {
+        const body = await res.text();
+        console.warn(`[football-data] HTTP ${res.status} (intento ${attempt}/${maxAttempts}):`, body);
+        await sleep(attempt * 800);
+        continue;
+      }
+
+      if (res.status === 429) {
+        console.warn('[football-data] Rate limit alcanzado (10 req/min en plan free)');
+        throw new FootballDataError();
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`[football-data] HTTP ${res.status}:`, body);
+        throw new FootballDataError();
+      }
+
+      return (await res.json()) as T;
+    } catch (e) {
+      if (e instanceof FootballDataError) throw e;
+      if (attempt < maxAttempts) {
+        console.warn(`[football-data] Error de red (intento ${attempt}/${maxAttempts}):`, e);
+        await sleep(attempt * 800);
+        continue;
+      }
+      console.error('[football-data] Error de red:', e);
+      throw new FootballDataError();
+    }
+  }
+
+  throw new FootballDataError();
 }
 
 // ── Tipos internos de la respuesta ────────────────────────────
@@ -247,6 +294,7 @@ function normalizeMatch(m: FDMatch): NormalizedMatch {
     awayScore:   score.away,
     date:        formatDate(m.utcDate),
     isoDate:     m.utcDate.split('T')[0],
+    utcDate:     m.utcDate,
     time:        formatTime(m.utcDate),
     stadium:     m.venue ?? '',
     city:        '',
@@ -285,7 +333,6 @@ export async function getWCFixtures(filters?: {
     Object.keys(params).length ? params : undefined,
   );
 
-  if (!data) return [];
   return data.matches
     .map(normalizeMatch)
     .sort((a, b) => a.isoDate.localeCompare(b.isoDate));
@@ -304,8 +351,6 @@ export async function getWCUpcoming(limit = 5): Promise<NormalizedMatch[]> {
     `/competitions/${WC_CODE}/matches`,
     { dateFrom: fmt(today), dateTo: fmt(future) },
   );
-  if (!data) return [];
-  // Filtrar finalizados y ordenar por fecha
   return data.matches
     .filter(m => m.status !== 'FINISHED' && m.status !== 'CANCELLED' && m.status !== 'POSTPONED')
     .sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime())
@@ -319,21 +364,18 @@ export async function getWCLive(): Promise<NormalizedMatch[]> {
     `/competitions/${WC_CODE}/matches`,
     { status: 'IN_PLAY' },
   );
-  if (!data) return [];
   return data.matches.map(normalizeMatch);
 }
 
 /** Un partido por su ID */
 export async function getWCMatchById(matchId: number): Promise<NormalizedMatch | null> {
   const data = await fdFetch<{ match: FDMatch }>(`/matches/${matchId}`);
-  if (!data) return null;
   return normalizeMatch(data.match);
 }
 
 /** Standings / posiciones por grupo */
 export async function getWCStandings(): Promise<NormalizedGroup[]> {
   const data = await fdFetch<FDStandingsResponse>(`/competitions/${WC_CODE}/standings`);
-  if (!data) return [];
 
   const groups: NormalizedGroup[] = [];
 

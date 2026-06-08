@@ -79,6 +79,27 @@ function emptyForm(order: number): SlideForm {
   };
 }
 
+function confirmDestructive(title: string, message: string, onConfirm: () => void | Promise<void>) {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      void Promise.resolve(onConfirm());
+    }
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: 'Cancelar', style: 'cancel' },
+    { text: 'Eliminar', style: 'destructive', onPress: () => void Promise.resolve(onConfirm()) },
+  ]);
+}
+
+function showAlert(title: string, message: string) {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+}
+
 // ── Card de cada slide ────────────────────────────────────────
 function SlideCard({
   item,
@@ -112,7 +133,12 @@ function SlideCard({
       {/* Imagen */}
       <View style={card.imageWrapper}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image
+            key={item.imageUrl}
+            source={{ uri: item.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
         ) : (
           <View style={[StyleSheet.absoluteFill, card.noImage, { backgroundColor: theme.colors.surfaceAlt }]}>
             <MaterialCommunityIcons name="image-outline" size={32} color={theme.colors.muted} />
@@ -189,24 +215,25 @@ function SlideCard({
           </Text>
         </Pressable>
 
-        {/* Editar */}
-        <Pressable
-          onPress={onEdit}
-          style={[card.actionBtn, { backgroundColor: 'rgba(61,165,245,0.12)' }]}
-          accessibilityLabel="Editar slide"
-        >
-          <Feather name="edit-2" size={14} color={CELESTE_DARK} />
-          <Text style={[card.actionText, { color: CELESTE_DARK }]}>Editar</Text>
-        </Pressable>
+        <View style={card.actionGroup}>
+          <Pressable
+            onPress={onEdit}
+            style={[card.actionBtn, { backgroundColor: 'rgba(61,165,245,0.12)' }]}
+            accessibilityLabel="Editar slide"
+          >
+            <Feather name="edit-2" size={14} color={CELESTE_DARK} />
+            <Text style={[card.actionText, { color: CELESTE_DARK }]}>Editar</Text>
+          </Pressable>
 
-        {/* Eliminar */}
-        <Pressable
-          onPress={onDelete}
-          style={[card.actionBtn, { backgroundColor: theme.colors.surfaceAlt }]}
-          accessibilityLabel="Eliminar slide"
-        >
-          <Feather name="trash-2" size={14} color={theme.colors.error} />
-        </Pressable>
+          <Pressable
+            onPress={onDelete}
+            style={[card.actionBtn, { backgroundColor: 'rgba(239,68,68,0.10)' }]}
+            accessibilityLabel="Eliminar slide"
+          >
+            <Feather name="trash-2" size={14} color={theme.colors.error} />
+            <Text style={[card.actionText, { color: theme.colors.error }]}>Eliminar</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -231,7 +258,8 @@ const card = StyleSheet.create({
   iconBtn:       { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   toggleBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   toggleText:    { fontSize: 12, fontWeight: '700' },
-  actionBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, marginLeft: 'auto' },
+  actionGroup:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
+  actionBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   actionText:    { fontSize: 12, fontWeight: '700' },
 });
 
@@ -257,16 +285,19 @@ export function SliderManagementScreen() {
   const sorted = useMemo(() => [...slides].sort((a, b) => a.order - b.order), [slides]);
 
   const openCreate = () => {
+    setUploadProgress(null);
     setForm(emptyForm(sorted.length + 1));
     setModalVisible(true);
   };
 
   const openEdit = (s: SliderSlide) => {
+    setUploadProgress(null);
     setForm({
       id: s.id,
       title: s.title,
       description: s.description ?? '',
-      imagePath: s.imagePath,
+      imageUri: undefined,
+      imagePath: s.storedImagePath || s.imagePath,
       imageUrl: s.imageUrl,
       buttonEnabled: s.button.enabled,
       buttonText: s.button.text ?? '',
@@ -288,7 +319,7 @@ export function SliderManagementScreen() {
         const file: File = e.target.files?.[0];
         if (!file) return;
         const url = URL.createObjectURL(file);
-        setForm(s => ({ ...s, imageUri: url, imageUrl: url }));
+        setForm((s) => ({ ...s, imageUri: url, imageUrl: url }));
       };
       input.click();
       return;
@@ -312,23 +343,23 @@ export function SliderManagementScreen() {
 
   const handleSave = async () => {
     if (!form.title.trim()) {
-      Alert.alert('Error', 'El título es obligatorio.');
+      showAlert('Error', 'El título es obligatorio.');
       return;
     }
     if (!form.imageUri && !form.imagePath) {
-      Alert.alert('Error', 'Seleccioná una imagen antes de guardar.');
+      showAlert('Error', 'Seleccioná una imagen antes de guardar.');
       return;
     }
     if (form.buttonEnabled && !form.buttonText.trim()) {
-      Alert.alert('Error', 'Agregá el texto del botón o desactivalo.');
+      showAlert('Error', 'Agregá el texto del botón o desactivalo.');
       return;
     }
 
     const existed = !!form.id;
     setSaving(true);
-    setUploadProgress(null);
+    setUploadProgress(form.imageUri ? 0 : null);
     try {
-      await upsertMutation.mutateAsync({
+      const savePromise = upsertMutation.mutateAsync({
         id: form.id,
         title: form.title.trim(),
         description: form.description.trim(),
@@ -345,6 +376,14 @@ export function SliderManagementScreen() {
         onUploadProgress: form.imageUri ? setUploadProgress : undefined,
       });
 
+      const timeoutMs = 90_000;
+      await Promise.race([
+        savePromise,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Tiempo de espera agotado. Revisá la conexión e intentá de nuevo.')), timeoutMs);
+        }),
+      ]);
+
       log({
         action: existed ? 'update' : 'create',
         module: 'slider',
@@ -352,8 +391,9 @@ export function SliderManagementScreen() {
         detail: form.title.trim(),
       });
       setModalVisible(false);
+      void refetch();
     } catch (e) {
-      Alert.alert('Error al guardar', e instanceof Error ? e.message : 'Intentá de nuevo.');
+      showAlert('Error al guardar', e instanceof Error ? e.message : 'Intentá de nuevo.');
     } finally {
       setSaving(false);
       setUploadProgress(null);
@@ -366,40 +406,36 @@ export function SliderManagementScreen() {
       return;
     }
 
-    Alert.alert('Eliminar imagen', '¿Querés eliminar la imagen de este slide?', [
-      { text: 'Cancelar' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteImageMutation.mutateAsync({ id: form.id!, imagePath: form.imagePath! });
-            setForm((s) => ({ ...s, imageUri: undefined, imageUrl: undefined, imagePath: undefined }));
-            log({ action: 'update', module: 'slider', title: 'Imagen eliminada', detail: form.title });
-          } catch (e) {
-            Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo eliminar la imagen.');
-          }
-        },
+    confirmDestructive(
+      'Eliminar imagen',
+      '¿Querés eliminar la imagen de este slide?',
+      async () => {
+        try {
+          await deleteImageMutation.mutateAsync({ id: form.id!, imagePath: form.imagePath! });
+          setForm((s) => ({ ...s, imageUri: undefined, imageUrl: undefined, imagePath: undefined }));
+          log({ action: 'update', module: 'slider', title: 'Imagen eliminada', detail: form.title });
+          void refetch();
+        } catch (e) {
+          showAlert('Error', e instanceof Error ? e.message : 'No se pudo eliminar la imagen.');
+        }
       },
-    ]);
+    );
   };
 
   const confirmDelete = (s: SliderSlide) => {
-    Alert.alert('Eliminar slide', `¿Eliminar "${s.title}"?`, [
-      { text: 'Cancelar' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteMutation.mutateAsync({ id: s.id, imagePath: s.imagePath });
-            log({ action: 'delete', module: 'slider', title: 'Slide eliminado', detail: s.title });
-          } catch (e) {
-            Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo eliminar.');
-          }
-        },
+    confirmDestructive(
+      'Eliminar slide',
+      `¿Eliminar "${s.title}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          await deleteMutation.mutateAsync({ id: s.id, imagePath: s.imagePath });
+          log({ action: 'delete', module: 'slider', title: 'Slide eliminado', detail: s.title });
+          void refetch();
+        } catch (e) {
+          showAlert('Error', e instanceof Error ? e.message : 'No se pudo eliminar.');
+        }
       },
-    ]);
+    );
   };
 
   const move = (id: string, dir: 'up' | 'down') => {

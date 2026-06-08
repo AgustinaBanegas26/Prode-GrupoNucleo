@@ -135,6 +135,7 @@ function normalizeFixture(f: ApiFixture): NormalizedMatch {
     awayScore:   f.goals.away,
     date:        formatDate(f.fixture.date),
     isoDate:     f.fixture.date.split('T')[0],
+    utcDate:     f.fixture.date,
     time:        formatTime(f.fixture.date),
     stadium:     f.fixture.venue.name ?? '',
     city:        f.fixture.venue.city ?? '',

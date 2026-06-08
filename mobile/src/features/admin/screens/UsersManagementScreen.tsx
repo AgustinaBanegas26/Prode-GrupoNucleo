@@ -63,7 +63,6 @@ function UserCard({
   user,
   theme,
   isDark,
-  onToggleActive,
   onEdit,
   onDelete,
   onResetPassword,
@@ -73,7 +72,6 @@ function UserCard({
   user: AppUser;
   theme: any;
   isDark: boolean;
-  onToggleActive: (val: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onResetPassword: () => void;
@@ -116,21 +114,6 @@ function UserCard({
       minute: "2-digit",
     });
   }, [user.ultimoAcceso]);
-
-  // Status Action Sheet
-  const handleStatusActions = () => {
-    Alert.alert(
-      "Gestión de Estado de Usuario",
-      `Seleccioná una acción para ${user.nombre}:`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "🟢 Activar", onPress: () => onToggleActive(true) },
-        { text: "🔴 Desactivar", onPress: () => onToggleActive(false) },
-        { text: "🔒 Bloquear", style: "destructive", onPress: () => onToggleActive(false) },
-        { text: "🔓 Desbloquear", onPress: () => onToggleActive(true) },
-      ]
-    );
-  };
 
   return (
     <View
@@ -202,23 +185,6 @@ function UserCard({
       </View>
 
       <View style={us.actions}>
-        <Pressable
-          onPress={handleStatusActions}
-          style={[
-            us.iconBtn,
-            {
-              backgroundColor: user.activo
-                ? "rgba(34, 197, 94, 0.12)"
-                : "rgba(239, 68, 68, 0.12)",
-            },
-          ]}
-        >
-          <MaterialCommunityIcons
-            name={user.activo ? "shield-check" : "shield-alert"}
-            size={16}
-            color={user.activo ? "#22C55E" : "#EF4444"}
-          />
-        </Pressable>
         <Pressable
           onPress={onEdit}
           style={[
@@ -311,7 +277,6 @@ export function UsersManagementScreen() {
 
   const users = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
-  const setActivo = useUsersStore((s) => s.setActivo);
   const upsert = useUsersStore((s) => s.upsert);
   const remove = useUsersStore((s) => s.remove);
   const resetPassword = useUsersStore((s) => s.resetPassword);
@@ -355,20 +320,6 @@ export function UsersManagementScreen() {
     if (statusFilter === "blocked") arr = arr.filter((u) => !u.activo);
     return arr;
   }, [users, query, statusFilter]);
-
-  const handleToggleActive = async (user: AppUser, val: boolean) => {
-    try {
-      await setActivo(user.id, val);
-      log({
-        action: "toggle",
-        module: "users",
-        title: val ? "Usuario activado/desbloqueado" : "Usuario desactivado/bloqueado",
-        detail: `${user.nombre} · ${user.clienteId}`,
-      });
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "No se pudo actualizar el estado del usuario");
-    }
-  };
 
   const handleEdit = (user: AppUser) => {
     setEditingUser(user);
@@ -596,7 +547,6 @@ export function UsersManagementScreen() {
                   isDark={isDark}
                   rankPosition={rankingByCliente.get(String(user.clienteId))?.position}
                   rankPoints={rankingByCliente.get(String(user.clienteId))?.points}
-                  onToggleActive={(val) => handleToggleActive(user, val)}
                   onEdit={() => handleEdit(user)}
                   onDelete={() => handleDelete(user)}
                   onResetPassword={() => handleResetPassword(user)}

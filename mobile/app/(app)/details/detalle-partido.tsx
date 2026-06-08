@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -98,32 +98,17 @@ export default function MatchDetailsScreen() {
     }
   };
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && !match) {
+      router.replace('/(app)/pronosticos');
+    }
+  }, [isLoading, match, router]);
+
+  if (isLoading || !match) {
     return (
       <Screen>
-        <Pressable onPress={() => router.back()} style={{ padding: 16 }}>
-          <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>← Volver</Text>
-        </Pressable>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ color: theme.colors.muted, marginTop: 12 }}>Cargando partido...</Text>
-        </View>
-      </Screen>
-    );
-  }
-
-  if (!match) {
-    return (
-      <Screen>
-        <Pressable onPress={() => router.back()} style={{ padding: 16 }}>
-          <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>← Volver</Text>
-        </Pressable>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <Text style={{ fontSize: 36 }}>⚽</Text>
-          <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 16 }}>Partido no encontrado</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 32 }}>
-            Este partido aún no está en la base de datos. El administrador debe cargarlo.
-          </Text>
         </View>
       </Screen>
     );

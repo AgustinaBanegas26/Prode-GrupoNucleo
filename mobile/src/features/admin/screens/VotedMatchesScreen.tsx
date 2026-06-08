@@ -16,6 +16,8 @@ import { useRouter } from 'expo-router';
 
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { supabase } from '../../../lib/supabase';
+import { getWCFixtures } from '../../../services/footballData';
+import type { NormalizedMatch } from '../../../services/apiFootball.types';
 import { getFlagEmoji } from '../../../theme/theme';
 
 const CELESTE_DARK = '#3DA5F5';
@@ -38,12 +40,22 @@ type MatchGroup = {
   fixture_id: number;
   home_team: string;
   away_team: string;
+  home_code: string;
+  away_code: string;
   match_date: string;
   home_logo: string | null;
   away_logo: string | null;
   preds: PredRow[];
   expanded: boolean;
 };
+
+function teamCodeFromName(name: string): string {
+  return name.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || '???';
+}
+
+function isPendingStatus(status?: string | null): boolean {
+  return !status || status === 'pending';
+}
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
   const opacity    = useRef(new Animated.Value(0)).current;
@@ -107,20 +119,32 @@ export function VotedMatchesScreen() {
     const matchMap: Record<number, any> = {};
     for (const m of matches ?? []) matchMap[m.fixture_id] = m;
 
-    // Agrupar por fixture_id
+    const apiMatchMap: Record<number, NormalizedMatch> = {};
+    try {
+      const apiMatches = await getWCFixtures();
+      for (const m of apiMatches) apiMatchMap[m.id] = m;
+    } catch {
+      // fallback: solo datos de Supabase
+    }
+
     const groupMap: Record<number, MatchGroup> = {};
     for (const p of preds) {
-      const m = matchMap[p.fixture_id];
+      const db = matchMap[p.fixture_id];
+      const api = apiMatchMap[p.fixture_id];
       if (!groupMap[p.fixture_id]) {
+        const homeTeam = db?.home_team ?? api?.homeTeam ?? `Partido #${p.fixture_id}`;
+        const awayTeam = db?.away_team ?? api?.awayTeam ?? 'Por confirmar';
         groupMap[p.fixture_id] = {
           fixture_id: p.fixture_id,
-          home_team:  m?.home_team ?? `Partido #${p.fixture_id}`,
-          away_team:  m?.away_team ?? '',
-          match_date: m?.match_date ?? '',
-          home_logo:  m?.home_logo ?? null,
-          away_logo:  m?.away_logo ?? null,
-          preds:      [],
-          expanded:   false,
+          home_team: homeTeam,
+          away_team: awayTeam,
+          home_code: api?.homeCode ?? teamCodeFromName(homeTeam),
+          away_code: api?.awayCode ?? teamCodeFromName(awayTeam),
+          match_date: db?.match_date ?? api?.utcDate ?? api?.isoDate ?? '',
+          home_logo: db?.home_logo ?? api?.homeLogo ?? null,
+          away_logo: db?.away_logo ?? api?.awayLogo ?? null,
+          preds: [],
+          expanded: true,
         };
       }
       groupMap[p.fixture_id].preds.push({ ...p, nombre: nombreMap[p.cliente_id] ?? p.cliente_id });
@@ -146,8 +170,8 @@ export function VotedMatchesScreen() {
 
   const filtered = useMemo(() => {
     let arr = [...groups];
-    if (filter === 'pending')   arr = arr.filter(g => g.preds.some(p => p.status === 'pending'));
-    if (filter === 'evaluated') arr = arr.filter(g => g.preds.every(p => p.status !== 'pending'));
+    if (filter === 'pending')   arr = arr.filter(g => g.preds.some(p => isPendingStatus(p.status)));
+    if (filter === 'evaluated') arr = arr.filter(g => g.preds.every(p => !isPendingStatus(p.status)));
     if (query.trim()) {
       const q = query.toLowerCase();
       arr = arr.filter(g =>
@@ -227,12 +251,10 @@ export function VotedMatchesScreen() {
           </View>
         ) : (
           filtered.map((group, gi) => {
-            const homeCode = group.home_team.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
-            const awayCode = group.away_team.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
             const dateStr  = group.match_date
               ? new Date(group.match_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
               : '';
-            const hasPending = group.preds.some(p => p.status === 'pending');
+            const hasPending = group.preds.some(p => isPendingStatus(p.status));
 
             return (
               <FadeSlide key={group.fixture_id} delay={gi * 25}>
@@ -240,11 +262,11 @@ export function VotedMatchesScreen() {
                   {/* Header del grupo */}
                   <Pressable onPress={() => toggleExpand(group.fixture_id)} style={s.groupHeader}>
                     <View style={s.teamsRow}>
-                      <TeamImg logo={group.home_logo} code={homeCode} size={28} />
-                      <Text style={[s.matchName, { color: theme.colors.text }]}>
+                      <TeamImg logo={group.home_logo} code={group.home_code} size={28} />
+                      <Text style={[s.matchName, { color: theme.colors.text }]} numberOfLines={2}>
                         {group.home_team} vs {group.away_team}
                       </Text>
-                      <TeamImg logo={group.away_logo} code={awayCode} size={28} />
+                      <TeamImg logo={group.away_logo} code={group.away_code} size={28} />
                     </View>
                     <View style={s.groupMeta}>
                       <Text style={[s.groupDate, { color: theme.colors.muted }]}>{dateStr}</Text>
@@ -265,7 +287,7 @@ export function VotedMatchesScreen() {
                     <View style={[s.predsContainer, { borderTopColor: border }]}>
                       {group.preds.map(p => {
                         const statusColor = p.status === 'correct' ? '#22C55E' : p.status === 'partial' ? '#F59E0B' : p.status === 'incorrect' ? '#ef4444' : theme.colors.muted;
-                        const statusLabel = p.status === 'correct' ? '✓ Exacto' : p.status === 'partial' ? '~ Ganador' : p.status === 'incorrect' ? '✗ Error' : 'Pendiente';
+                        const statusLabel = p.status === 'correct' ? '✓ Exacto' : p.status === 'partial' ? '~ Ganador' : p.status === 'incorrect' ? '✗ Error' : isPendingStatus(p.status) ? 'Pendiente' : 'Pendiente';
                         const pickLabel   = p.pick_winner === 'home' ? group.home_team : p.pick_winner === 'away' ? group.away_team : 'Empate';
                         return (
                           <View key={p.id} style={[s.predRow, { borderBottomColor: border }]}>
@@ -276,9 +298,14 @@ export function VotedMatchesScreen() {
                             </View>
                             <View style={{ flex: 1, gap: 2 }}>
                               <Text style={[s.predName, { color: theme.colors.text }]}>{p.nombre ?? p.cliente_id}</Text>
-                              <Text style={[s.predPick, { color: theme.colors.muted }]}>
-                                {pickLabel} · {p.score_home ?? '-'} – {p.score_away ?? '-'}
-                              </Text>
+                              <Text style={[s.predPick, { color: theme.colors.muted }]}>{pickLabel}</Text>
+                              <View style={s.predScoreRow}>
+                                <TeamImg logo={group.home_logo} code={group.home_code} size={18} />
+                                <Text style={[s.predPick, { color: theme.colors.text }]}>
+                                  {p.score_home ?? '-'} – {p.score_away ?? '-'}
+                                </Text>
+                                <TeamImg logo={group.away_logo} code={group.away_code} size={18} />
+                              </View>
                             </View>
                             <View style={{ alignItems: 'flex-end', gap: 2 }}>
                               <Text style={[s.predStatus, { color: statusColor }]}>{statusLabel}</Text>
@@ -331,6 +358,7 @@ const s = StyleSheet.create({
   predAvatarText: { fontSize: 12, fontWeight: '800' },
   predName:    { fontSize: 13, fontWeight: '700' },
   predPick:    { fontSize: 12, fontWeight: '500' },
+  predScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   predStatus:  { fontSize: 12, fontWeight: '700' },
   predPoints:  { fontSize: 12, fontWeight: '700' },
 });

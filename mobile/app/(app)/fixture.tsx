@@ -17,7 +17,8 @@ import {
 
 import { Screen } from '../../src/components/Screen';
 import { useAllFixtures } from '../../src/hooks/useApiFootball';
-import { usePredictions } from '../../src/features/content/api/predictions';
+import { FOOTBALL_DATA_ERROR_MSG } from '../../src/services/footballData';
+import { usePredictions, usePredictionsRealtime } from '../../src/features/content/api/predictions';
 import type { NormalizedMatch } from '../../src/services/apiFootball.types';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { useAuth } from '../../src/providers/AuthProvider';
@@ -125,10 +126,11 @@ export default function FixtureScreen() {
   const isGroupPhase = selectedPhase === 'Fase de Grupos';
 
   // Datos de partidos desde la API (football-data.org)
-  const { data: apiMatches, isLoading, isError, error, refetch, isFetching } = useAllFixtures();
+  const { data: apiMatches, isLoading, isError, refetch, isFetching } = useAllFixtures();
 
   // Pronósticos del usuario desde Supabase
   const { data: predictions } = usePredictions(user?.cliente_id);
+  usePredictionsRealtime();
   const predMap = useMemo(() => {
     const m: Record<number, string> = {};
     for (const p of predictions ?? []) {
@@ -235,8 +237,7 @@ export default function FixtureScreen() {
             <View style={styles.centerState}>
               <Text style={{ fontSize: 36 }}>⚠️</Text>
               <Text style={[styles.stateText, { color: theme.colors.muted }]}>
-                Error cargando fixture:{'\n'}
-                {(error as Error)?.message ?? 'Sin conexión a la API'}
+                {FOOTBALL_DATA_ERROR_MSG}
               </Text>
               <Pressable onPress={() => refetch()} style={[styles.retryBtn, { backgroundColor: CELESTE_DARK }]}>
                 <Text style={styles.retryBtnText}>Reintentar</Text>
@@ -257,12 +258,7 @@ export default function FixtureScreen() {
                 key={match.id}
                 match={match}
                 myPick={predMap[match.id]}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(app)/details/detalle-partido',
-                    params: { matchId: String(match.id) },
-                  })
-                }
+                onPress={() => router.push('/(app)/pronosticos')}
               />
             ))
           )}

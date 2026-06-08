@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../providers/ThemeProvider';
 import type { PositionItem } from '../features/mockData';
 import { BadgeIndicator, type BadgeType } from './BadgeIndicator';
+import { UserAvatar } from './UserAvatar';
 import { radius, shadows, spacing } from '../theme/theme';
 
 const CELESTE      = '#6EC6FF';
@@ -69,12 +70,15 @@ export function PremiumRankingCard({ item }: PremiumRankingCardProps) {
         )}
       </View>
 
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: isMe ? CELESTE_DARK : theme.colors.surfaceAlt }]}>
-        <Text style={[styles.avatarText, { color: isMe ? '#fff' : theme.colors.textSecondary }]}>
-          {item.name.slice(0, 2).toUpperCase()}
-        </Text>
-      </View>
+      <UserAvatar
+        name={item.name}
+        uri={item.avatarUrl}
+        size={38}
+        isHighlighted={isMe}
+        highlightColor={CELESTE_DARK}
+        fallbackBg={isMe ? CELESTE_DARK : theme.colors.surfaceAlt}
+        fallbackTextColor={isMe ? '#fff' : theme.colors.textSecondary}
+      />
 
       {/* Nombre */}
       <View style={styles.nameBlock}>
@@ -119,17 +123,6 @@ const styles = StyleSheet.create({
   },
   medal: {
     fontSize: 18,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '700',
   },
   nameBlock: {
     flex: 1,

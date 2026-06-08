@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../../../lib/supabase';
@@ -70,6 +71,48 @@ export function usePredictions(clienteId: string | undefined) {
   });
 }
 
+let predictionsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let predictionsRealtimeRefCount = 0;
+
+export function usePredictionsRealtime() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const onChange = () => {
+      void qc.invalidateQueries({ queryKey: ['predictions'] });
+      void qc.refetchQueries({ queryKey: ['predictions'], type: 'active' });
+    };
+
+    if (predictionsRealtimeChannel) {
+      predictionsRealtimeRefCount += 1;
+      return () => {
+        predictionsRealtimeRefCount -= 1;
+        if (predictionsRealtimeRefCount <= 0 && predictionsRealtimeChannel) {
+          void supabase.removeChannel(predictionsRealtimeChannel);
+          predictionsRealtimeChannel = null;
+          predictionsRealtimeRefCount = 0;
+        }
+      };
+    }
+
+    predictionsRealtimeChannel = supabase
+      .channel('predictions-realtime-hook')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions' }, onChange)
+      .subscribe();
+
+    predictionsRealtimeRefCount = 1;
+
+    return () => {
+      predictionsRealtimeRefCount -= 1;
+      if (predictionsRealtimeRefCount <= 0 && predictionsRealtimeChannel) {
+        void supabase.removeChannel(predictionsRealtimeChannel);
+        predictionsRealtimeChannel = null;
+        predictionsRealtimeRefCount = 0;
+      }
+    };
+  }, [qc]);
+}
+
 
 export function useUpsertPrediction() {
   const qc = useQueryClient();
@@ -120,9 +163,10 @@ export function useUpsertPrediction() {
 
       return { isUpdate };
     },
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: predictionsQueryKey(variables.cliente_id) });
-      qc.invalidateQueries({ queryKey: allPredictionsQueryKey });
+    onSuccess: async (_data, variables) => {
+      await qc.invalidateQueries({ queryKey: predictionsQueryKey(variables.cliente_id) });
+      await qc.invalidateQueries({ queryKey: allPredictionsQueryKey });
+      await qc.refetchQueries({ queryKey: predictionsQueryKey(variables.cliente_id), type: 'active' });
     },
   });
 }

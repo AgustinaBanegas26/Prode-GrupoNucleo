@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { Screen } from '../../src/components/Screen';
 import { useUpcomingMatches } from '../../src/hooks/useApiFootball';
+import { FOOTBALL_DATA_ERROR_MSG } from '../../src/services/footballData';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../src/theme/theme';
@@ -147,22 +148,47 @@ export default function ProfileScreen() {
   const clientId = user?.role === 'admin' ? `Administrador` : `Cliente #${user?.cliente_id ?? ''}`;
   const bg = theme.isDark ? '#0D0D0D' : '#F5F7FA';
 
-  // ── Cargar avatar desde Supabase al montar ────────────────
-  useEffect(() => {
+  const loadProfile = React.useCallback(async () => {
     if (!user?.cliente_id) return;
-    supabase
+    const { data } = await supabase
       .from('clientes')
       .select('avatar_url, nombre')
       .eq('cliente_id', user.cliente_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.avatar_url) setAvatarUri(data.avatar_url);
-        if (data?.nombre)     setDisplayName(data.nombre);
-      });
+      .maybeSingle();
+    if (data?.avatar_url) setAvatarUri(data.avatar_url);
+    if (data?.nombre) setDisplayName(data.nombre);
+  }, [user?.cliente_id]);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
+    if (!user?.cliente_id) return;
+    const channel = supabase
+      .channel(`perfil-cliente-${user.cliente_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'clientes',
+          filter: `cliente_id=eq.${user.cliente_id}`,
+        },
+        (payload) => {
+          const row = payload.new as { avatar_url?: string; nombre?: string };
+          if (row?.avatar_url) setAvatarUri(row.avatar_url);
+          if (row?.nombre) setDisplayName(row.nombre);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.cliente_id]);
 
   // ── Próximo partido desde API ─────────────────────────────
-  const { data: apiUpcoming } = useUpcomingMatches(1);
+  const { data: apiUpcoming, isError: upcomingError, refetch: refetchUpcoming } = useUpcomingMatches(1);
   const nextMatch = React.useMemo(() => {
     if (apiUpcoming && apiUpcoming.length > 0) {
       const m = apiUpcoming[0];
@@ -235,6 +261,7 @@ export default function ProfileScreen() {
         .from('clientes')
         .update({ nombre })
         .eq('cliente_id', user.cliente_id);
+      await loadProfile();
     }
   };
 
@@ -424,6 +451,17 @@ export default function ProfileScreen() {
           {/* ══════════════════════════════════════════════════
               PRÓXIMO PARTIDO
           ══════════════════════════════════════════════════ */}
+          {upcomingError && (
+            <FadeSlide delay={180}>
+              <Text style={[secS.title, { color: theme.colors.text }]}>Próximo partido</Text>
+              <View style={{ marginTop: 10, alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: theme.colors.muted, textAlign: 'center' }}>{FOOTBALL_DATA_ERROR_MSG}</Text>
+                <Pressable onPress={() => refetchUpcoming()} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: CELESTE_DARK }}>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Reintentar</Text>
+                </Pressable>
+              </View>
+            </FadeSlide>
+          )}
           {nextMatch && (
             <FadeSlide delay={180}>
               <Text style={[secS.title, { color: theme.colors.text }]}>Próximo partido</Text>

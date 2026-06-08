@@ -131,6 +131,7 @@ export interface NormalizedMatch {
   awayScore:   number | null;
   date:        string;    // "11 Jun"
   isoDate:     string;    // "2026-06-11"
+  utcDate:     string;    // ISO 8601 completo
   time:        string;    // "15:00"
   stadium:     string;
   city:        string;

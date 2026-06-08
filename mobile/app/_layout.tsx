@@ -8,6 +8,7 @@ import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 import { subscribeToPasswordRecoveryLinks } from '../src/services/auth/passwordRecoveryService';
+import { useAutoScoringSync } from '../src/hooks/useAutoScoringSync';
 
 const PUBLIC_AUTH_ROUTES = new Set([
   'login',
@@ -97,6 +98,12 @@ function RecoveryLinkListener() {
   return null;
 }
 
+function AutoScoringSyncListener() {
+  const { user, loading } = useAuth();
+  useAutoScoringSync(!loading && !!user);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -104,6 +111,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <RecoveryLinkListener />
+            <AutoScoringSyncListener />
             <AuthGate>
               <Slot />
             </AuthGate>

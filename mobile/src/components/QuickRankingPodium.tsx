@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../providers/ThemeProvider';
 import type { PositionItem } from '../features/mockData';
 import { radius, shadows, spacing } from '../theme/theme';
+import { UserAvatar } from './UserAvatar';
 
 interface QuickRankingPodiumProps {
   top3: PositionItem[];
@@ -34,28 +35,17 @@ function PodiumItem({ item }: { item: PositionItem }) {
       {/* Medalla emoji encima */}
       <Text style={styles.medalEmoji}>{emoji}</Text>
 
-      {/* Avatar */}
-      <View
-        style={[
-          styles.avatar,
-          {
-            width: avatarSize,
-            height: avatarSize,
-            borderRadius: avatarSize / 2,
-            borderColor: medalColor,
-            backgroundColor: item.isCurrent ? theme.colors.primary : theme.colors.surfaceAlt,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.avatarText,
-            { fontSize: isFirst ? 16 : 13, color: item.isCurrent ? '#fff' : theme.colors.text },
-          ]}
-        >
-          {item.name.slice(0, 2).toUpperCase()}
-        </Text>
-      </View>
+      <UserAvatar
+        name={item.name}
+        uri={item.avatarUrl}
+        size={avatarSize}
+        isHighlighted={!!item.isCurrent}
+        highlightColor={theme.colors.primary}
+        fallbackBg={item.isCurrent ? theme.colors.primary : theme.colors.surfaceAlt}
+        fallbackTextColor={item.isCurrent ? '#fff' : theme.colors.text}
+        borderColor={medalColor}
+        borderWidth={2.5}
+      />
 
       <Text style={[styles.podiumName, { color: theme.colors.text }]} numberOfLines={1}>
         {item.name}
@@ -142,14 +132,6 @@ const styles = StyleSheet.create({
   },
   medalEmoji: {
     fontSize: 22,
-  },
-  avatar: {
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontWeight: '800',
   },
   podiumName: {
     fontSize: 12,

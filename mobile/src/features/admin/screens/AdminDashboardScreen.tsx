@@ -33,7 +33,6 @@ type MenuOption = {
 const MENU_OPTIONS: MenuOption[] = [
   { id: '1',  icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
   { id: '13', icon: 'soccer',           label: 'Partidos',         description: 'Crear, editar y cargar resultados',  route: '/(admin)/matches'       },
-  { id: '11', icon: 'newspaper-variant',label: 'Noticias',         description: 'Publicar y editar noticias',          route: '/(admin)/news'          },
   { id: '9',  icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',     route: '/(admin)/slider'        },
   { id: '4',  icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'      },
   { id: '2',  icon: 'chart-line',       label: 'Estadísticas',      description: 'Datos y métricas en tiempo real',   route: '/(admin)/statistics'    },
@@ -41,7 +40,6 @@ const MENU_OPTIONS: MenuOption[] = [
   { id: '7',  icon: 'vote',             label: 'Predicciones',      description: 'Partidos con más pronósticos',      route: '/(admin)/voted-matches' },
   // Ocultado temporalmente (Fase 9)
   // { id: '8',  icon: 'history',          label: 'Actividad',         description: 'Registro de eventos del admin',     route: '/(admin)/user-activity' },
-  { id: '14', icon: 'toggle-switch',    label: 'Estado Sistema',    description: 'Gestión de variables de estado global', route: '/(admin)/system-states' },
 ];
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
@@ -74,11 +72,23 @@ export function AdminDashboardScreen() {
   }, [startUsersRealtime]);
 
   const stats = useMemo(() => {
-    const totalUsers  = users.length;
-    const activeUsers = users.filter((u) => u.activo).length;
+    const totalUsers = users.length;
+    const loggedInUsers = users.filter((u) => u.ultimoAcceso != null);
+    const predictionClienteIds = new Set(allPredictions.map((p) => String(p.cliente_id)));
+    const participatingUsers = loggedInUsers.filter((u) => predictionClienteIds.has(String(u.clienteId)));
     const predictionsCount = allPredictions.length;
-    const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
-    return { totalUsers, activeUsers, predictionsCount, participationPct };
+    const participationPct =
+      loggedInUsers.length > 0
+        ? Math.round((participatingUsers.length / loggedInUsers.length) * 100)
+        : 0;
+    return {
+      totalUsers,
+      activeUsers: users.filter((u) => u.activo).length,
+      loggedInUsers: loggedInUsers.length,
+      participatingUsers: participatingUsers.length,
+      predictionsCount,
+      participationPct,
+    };
   }, [users, allPredictions]);
 
   const handleLogout = async () => {
@@ -157,7 +167,7 @@ export function AdminDashboardScreen() {
               <Text style={[s.bigPct, { color: CELESTE_DARK }]}>{stats.participationPct}%</Text>
             </View>
             <Text style={[s.cardSub, { color: theme.colors.muted }]}>
-              {stats.activeUsers} de {stats.totalUsers} usuarios activos
+              {stats.participatingUsers} de {stats.loggedInUsers} con acceso al sistema
             </Text>
             {/* Barra celeste → azul */}
             <View style={[s.track, { backgroundColor: isDark ? 'rgba(110,198,255,0.12)' : '#EBF5FF' }]}>
