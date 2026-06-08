@@ -138,20 +138,20 @@ export function StatisticsScreen() {
   const statsData = [
     {
       icon: "account-multiple",
-      value: stats?.totalUsers || 0,
+      value: stats?.totalUsers ?? 0,
       label: "Usuarios Totales",
     },
     {
       icon: "account-check",
-      value: stats?.activeUsers || 0,
+      value: stats?.activeUsers ?? 0,
       label: "Usuarios Activos",
     },
     {
       icon: "soccer",
-      value: stats?.totalPredictions || 0,
+      value: stats?.totalPredictions ?? 0,
       label: "Pronósticos",
     },
-    { icon: "trending-up", value: "23%", label: "Crecimiento" },
+    { icon: "trending-up", value: stats?.totalUsers ? `${Math.round((stats.activeUsers / stats.totalUsers) * 100)}%` : "0%", label: "Participación" },
   ];
 
   return (

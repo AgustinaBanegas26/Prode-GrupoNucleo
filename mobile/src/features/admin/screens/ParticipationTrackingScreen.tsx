@@ -99,18 +99,16 @@ export function ParticipationTrackingScreen() {
 
   const recent = useMemo(() => activity.slice(0, 12), [activity]);
 
-  const bg      = isDark ? '#0a0f0a' : '#faf5ff';
-  const hFrom   = isDark ? '#052e16' : '#7c3aed';
-  const hTo     = isDark ? '#0a0f0a' : '#faf5ff';
+  const bg      = isDark ? '#0D0D0D' : '#F5F7FA';
   const cardBg  = isDark ? 'rgba(255,255,255,0.05)' : '#fff';
-  const border  = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+  const border  = isDark ? 'rgba(110,198,255,0.15)' : 'rgba(110,198,255,0.25)';
   const titleC  = isDark ? '#fff' : '#111';
   const subC    = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
   const dotC    = VERDE;
 
   return (
     <ScrollView style={[s.root, { backgroundColor: bg }]} showsVerticalScrollIndicator={false}>
-      <LinearGradient colors={[hFrom, hTo]} style={s.header}>
+      <LinearGradient colors={['#3DA5F5', '#0F4C81']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
         <View style={s.circleL} />
         <View style={s.circleS} />
         <FadeSlide delay={0}>
@@ -118,9 +116,9 @@ export function ParticipationTrackingScreen() {
             <Pressable onPress={() => router.push('/(admin)')} style={s.backBtn}>
               <MaterialCommunityIcons name="arrow-left" size={22} color="#fff" />
             </Pressable>
-            <LinearGradient colors={['#3b0764', '#1e1b4b']} style={s.iconGrad}>
-              <MaterialCommunityIcons name="chart-box" size={22} color="#a78bfa" />
-            </LinearGradient>
+            <View style={[s.iconGrad, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+              <MaterialCommunityIcons name="chart-box" size={22} color="#fff" />
+            </View>
             <View>
               <Text style={s.title}>Participación</Text>
               <Text style={s.sub}>Resumen operativo</Text>
@@ -198,8 +196,8 @@ export function ParticipationTrackingScreen() {
 const s = StyleSheet.create({
   root:     { flex: 1 },
   header:   { paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20, position: 'relative', overflow: 'hidden' },
-  circleL:  { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: `${VERDE}25`, top: -60, right: -40 },
-  circleS:  { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 1, borderColor: `${DORADO}20`, top: 20, right: 80 },
+  circleL:  { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: 'rgba(110,198,255,0.25)', top: -60, right: -40 },
+  circleS:  { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 1, borderColor: 'rgba(110,198,255,0.15)', top: 20, right: 80 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn:   { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   iconGrad:  { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },

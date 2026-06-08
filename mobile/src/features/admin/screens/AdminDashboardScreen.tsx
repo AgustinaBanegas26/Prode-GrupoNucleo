@@ -32,15 +32,14 @@ type MenuOption = {
 
 const MENU_OPTIONS: MenuOption[] = [
   { id: '1',  icon: 'account-multiple', label: 'Usuarios',         description: 'Administrá usuarios registrados',    route: '/(admin)/users'         },
-  { id: '14', icon: 'soccer-field',     label: 'Partidos',          description: 'Crear, editar y cargar resultados',  route: '/(admin)/matches'       },
-  { id: '9', icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',      route: '/(admin)/slider'         },
-  { id: '12', icon: 'bell',            label: 'Notificaciones',    description: 'Push manual e historial',            route: '/(admin)/notifications'  },
-  { id: '4', icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'       },
-  { id: '13', icon: 'cellphone',       label: 'Versiones APK',     description: 'Actualizaciones de la aplicación',   route: '/(admin)/app-versions'   },
-  { id: '2', icon: 'chart-line',       label: 'Estadísticas',      description: 'Datos y métricas en tiempo real',    route: '/(admin)/statistics'     },
-  { id: '6', icon: 'chart-box',        label: 'Participación',     description: 'Seguimiento de participación',       route: '/(admin)/participation'  },
-  { id: '7', icon: 'vote',             label: 'Predicciones',      description: 'Partidos con más pronósticos',        route: '/(admin)/voted-matches'  },
-  { id: '8', icon: 'history',          label: 'Actividad',         description: 'Registro de eventos del admin',       route: '/(admin)/user-activity'  },
+  { id: '9',  icon: 'view-carousel',    label: 'Slider',            description: 'Banners del inicio de usuarios',     route: '/(admin)/slider'        },
+  { id: '12', icon: 'bell',             label: 'Notificaciones',    description: 'Push manual e historial',            route: '/(admin)/notifications' },
+  { id: '4',  icon: 'trophy',           label: 'Rankings',          description: 'Puntos, ranking y puntuación',       route: '/(admin)/rankings'      },
+  { id: '13', icon: 'cellphone',        label: 'Versiones APK',     description: 'Actualizaciones de la aplicación',  route: '/(admin)/app-versions'  },
+  { id: '2',  icon: 'chart-line',       label: 'Estadísticas',      description: 'Datos y métricas en tiempo real',   route: '/(admin)/statistics'    },
+  { id: '6',  icon: 'chart-box',        label: 'Participación',     description: 'Seguimiento de participación',      route: '/(admin)/participation' },
+  { id: '7',  icon: 'vote',             label: 'Predicciones',      description: 'Partidos con más pronósticos',      route: '/(admin)/voted-matches' },
+  { id: '8',  icon: 'history',          label: 'Actividad',         description: 'Registro de eventos del admin',     route: '/(admin)/user-activity' },
 ];
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
@@ -174,7 +173,7 @@ export function AdminDashboardScreen() {
         <FadeSlide delay={180}>
           <Text style={[s.sectionTitle, { color: theme.colors.text }]}>⚽  Módulos</Text>
           <View style={s.menuGrid}>
-            {MENU_OPTIONS.map((opt, idx) => (
+            {MENU_OPTIONS.map((opt) => (
               <MenuCard key={opt.id} option={opt} theme={theme} isDark={isDark} onPress={() => router.push(opt.route as any)} />
             ))}
           </View>

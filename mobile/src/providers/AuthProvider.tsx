@@ -61,6 +61,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
+  // Watch for forced logout when user is disabled by admin
+  useEffect(() => {
+    if (!user) return;
+
+    const table = user.role === 'client' ? 'clientes' : 'admins';
+    const idField = user.role === 'client' ? 'id' : 'id';
+    const numericId = Number(user.id);
+    const filter = isNaN(numericId)
+      ? `id=eq.${user.id}`
+      : `id=eq.${numericId}`;
+
+    const channel = supabase
+      .channel(`auth-watch-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table, filter },
+        (payload: any) => {
+          const row = payload?.new;
+          if (!row) return;
+          if (row.habilitado === false) {
+            // Account disabled by admin — force logout
+            AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+            setUser(null);
+            setRole(null);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const saveSession = async (sessionUser: SessionUser) => {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
     setUser(sessionUser);

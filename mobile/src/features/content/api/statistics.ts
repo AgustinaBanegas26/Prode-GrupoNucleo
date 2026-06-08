@@ -35,22 +35,50 @@ export function useStatistics() {
         .select('*', { count: 'exact', head: true });
       if (predError) throw predError;
 
-      // Mock participation by day for now (we can improve this later)
-      const participationByDay = [
-        { label: 'Lun', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Mar', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Mié', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Jue', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Vie', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Sáb', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
-        { label: 'Dom', value: totalPredictions ? Math.floor(Math.random() * totalPredictions) : 0 },
+      // Real participation by day — count predictions per day of the week
+      let participationByDay: { label: string; value: number }[] = [
+        { label: 'Lun', value: 0 },
+        { label: 'Mar', value: 0 },
+        { label: 'Mié', value: 0 },
+        { label: 'Jue', value: 0 },
+        { label: 'Vie', value: 0 },
+        { label: 'Sáb', value: 0 },
+        { label: 'Dom', value: 0 },
       ];
+
+      if (totalPredictions && totalPredictions > 0) {
+        const { data: predRows } = await supabase
+          .from('predictions')
+          .select('created_at')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (predRows) {
+          for (const row of predRows) {
+            const dow = new Date(row.created_at).getDay(); // 0=Sun
+            const idx = dow === 0 ? 6 : dow - 1; // Mon=0…Sun=6
+            participationByDay[idx].value += 1;
+          }
+        }
+      }
+
+      // avgAccuracy: real percentage from scores table
+      let avgAccuracy = 0;
+      const { count: totalScores } = await supabase
+        .from('scores')
+        .select('*', { count: 'exact', head: true });
+      const { count: correctScores } = await supabase
+        .from('scores')
+        .select('*', { count: 'exact', head: true })
+        .in('result_type', ['exact', 'winner', 'draw']);
+      if (totalScores && totalScores > 0 && correctScores !== null) {
+        avgAccuracy = Math.round((correctScores / totalScores) * 100);
+      }
 
       return {
         totalUsers: totalUsers || 0,
         activeUsers: activeUsers || 0,
         totalPredictions: totalPredictions || 0,
-        avgAccuracy: 65,
+        avgAccuracy,
         participationByDay,
       };
     },

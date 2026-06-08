@@ -71,18 +71,7 @@ export function usePredictions(clienteId: string | undefined) {
 }
 
 /** Returns ALL predictions (admin use — count only). */
-export function useAllPredictions() {
-  return useQuery({
-    queryKey: ['predictions', 'all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('predictions')
-        .select('id');
-      if (error) throw new Error(error.message);
-      return (data ?? []) as { id: string }[];
-    },
-  });
-}
+
 
 export function useUpsertPrediction() {
   const qc = useQueryClient();
