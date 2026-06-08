@@ -162,27 +162,27 @@ CREATE POLICY "avatars_anon_update" ON storage.objects
 
 -- ── 10b. Storage bucket para slider ──────────────────────────
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('slider', 'slider', true)
+VALUES ('sliders', 'sliders', true)
 ON CONFLICT (id) DO NOTHING;
 
 DO $$ BEGIN
-  DROP POLICY IF EXISTS "slider_public_read" ON storage.objects;
-  DROP POLICY IF EXISTS "slider_anon_upload" ON storage.objects;
-  DROP POLICY IF EXISTS "slider_anon_update" ON storage.objects;
-  DROP POLICY IF EXISTS "slider_anon_delete" ON storage.objects;
+  DROP POLICY IF EXISTS "sliders_public_read" ON storage.objects;
+  DROP POLICY IF EXISTS "sliders_anon_upload" ON storage.objects;
+  DROP POLICY IF EXISTS "sliders_anon_update" ON storage.objects;
+  DROP POLICY IF EXISTS "sliders_anon_delete" ON storage.objects;
 END $$;
 
-CREATE POLICY "slider_public_read" ON storage.objects
-  FOR SELECT TO anon USING (bucket_id = 'slider');
+CREATE POLICY "sliders_public_read" ON storage.objects
+  FOR SELECT TO anon USING (bucket_id = 'sliders');
 
-CREATE POLICY "slider_anon_upload" ON storage.objects
-  FOR INSERT TO anon WITH CHECK (bucket_id = 'slider');
+CREATE POLICY "sliders_anon_upload" ON storage.objects
+  FOR INSERT TO anon WITH CHECK (bucket_id = 'sliders');
 
-CREATE POLICY "slider_anon_update" ON storage.objects
-  FOR UPDATE TO anon USING (bucket_id = 'slider') WITH CHECK (bucket_id = 'slider');
+CREATE POLICY "sliders_anon_update" ON storage.objects
+  FOR UPDATE TO anon USING (bucket_id = 'sliders') WITH CHECK (bucket_id = 'sliders');
 
-CREATE POLICY "slider_anon_delete" ON storage.objects
-  FOR DELETE TO anon USING (bucket_id = 'slider');
+CREATE POLICY "sliders_anon_delete" ON storage.objects
+  FOR DELETE TO anon USING (bucket_id = 'sliders');
 
 -- ── 11. Función recalcular ranking (usa schema real) ─────────
 CREATE OR REPLACE FUNCTION recalculate_ranking()

@@ -78,7 +78,7 @@ function FadeSlide({
 // ── Carrusel de banners ────────────────────────────────────────
 function WCBanner() {
   const router = useRouter();
-  const { data: slides = [] } = useSliderSlides();
+  const { data: slides = [] } = useSliderSlides({ onlyActive: true });
   useSliderRealtime();
   const flatRef = useRef<FlatList>(null);
   const [active, setActive] = useState(0);

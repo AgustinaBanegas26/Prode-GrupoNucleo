@@ -12,7 +12,7 @@ create table if not exists public.slider_slides (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text not null default '',
-  -- Ruta en Supabase Storage (bucket 'slider'), ej: "slides/<uuid>.jpg"
+  -- Ruta en Supabase Storage (bucket 'sliders'), ej: "slides/<uuid>.jpg"
   image_path text not null,
 
   button_enabled boolean not null default false,
@@ -61,10 +61,10 @@ end $$;
 -- 4) Storage bucket público para imágenes del slider
 -- (Si ya existe, no hace nada)
 insert into storage.buckets (id, name, public)
-values ('slider', 'slider', true)
+values ('sliders', 'sliders', true)
 on conflict (id) do nothing;
 
--- 5) RLS: tabla (permisiva para no romper el flujo actual)
+-- 5) RLS: tabla
 alter table public.slider_slides enable row level security;
 
 drop policy if exists "slider_slides_select_all" on public.slider_slides;
@@ -78,53 +78,53 @@ drop policy if exists "slider_slides_insert_all" on public.slider_slides;
 create policy "slider_slides_insert_all"
 on public.slider_slides
 for insert
-to public
-with check (true);
+to authenticated
+with check (auth.role = 'admin');
 
 drop policy if exists "slider_slides_update_all" on public.slider_slides;
 create policy "slider_slides_update_all"
 on public.slider_slides
 for update
-to public
-using (true)
-with check (true);
+to authenticated
+using (auth.role = 'admin')
+with check (auth.role = 'admin');
 
 drop policy if exists "slider_slides_delete_all" on public.slider_slides;
 create policy "slider_slides_delete_all"
 on public.slider_slides
 for delete
-to public
-using (true);
+to authenticated
+using (auth.role = 'admin');
 
--- 6) RLS: Storage (bucket slider) (permisiva)
+-- 6) RLS: Storage (bucket sliders)
 -- Nota: aplica sobre storage.objects, no sobre buckets.
 alter table storage.objects enable row level security;
 
-drop policy if exists "storage_slider_select_all" on storage.objects;
-create policy "storage_slider_select_all"
+drop policy if exists "storage_sliders_select_all" on storage.objects;
+create policy "storage_sliders_select_all"
 on storage.objects
 for select
 to public
-using (bucket_id = 'slider');
+using (bucket_id = 'sliders');
 
-drop policy if exists "storage_slider_insert_all" on storage.objects;
-create policy "storage_slider_insert_all"
+drop policy if exists "storage_sliders_insert_all" on storage.objects;
+create policy "storage_sliders_insert_all"
 on storage.objects
 for insert
-to public
-with check (bucket_id = 'slider');
+to authenticated
+with check (bucket_id = 'sliders' and auth.role = 'admin');
 
-drop policy if exists "storage_slider_update_all" on storage.objects;
-create policy "storage_slider_update_all"
+drop policy if exists "storage_sliders_update_all" on storage.objects;
+create policy "storage_sliders_update_all"
 on storage.objects
 for update
-to public
-using (bucket_id = 'slider')
-with check (bucket_id = 'slider');
+to authenticated
+using (bucket_id = 'sliders' and auth.role = 'admin')
+with check (bucket_id = 'sliders');
 
-drop policy if exists "storage_slider_delete_all" on storage.objects;
-create policy "storage_slider_delete_all"
+drop policy if exists "storage_sliders_delete_all" on storage.objects;
+create policy "storage_sliders_delete_all"
 on storage.objects
 for delete
-to public
-using (bucket_id = 'slider');
+to authenticated
+using (bucket_id = 'sliders');

@@ -236,7 +236,7 @@ export function SliderManagementScreen() {
   const { theme } = useAppTheme();
   const isDark = theme.isDark;
   const router = useRouter();
-  const { data: slides = [] } = useSliderSlides();
+  const { data: slides = [] } = useSliderSlides({ onlyActive: false });
   useSliderRealtime();
   const upsertMutation  = useUpsertSliderSlide();
   const deleteMutation  = useDeleteSliderSlide();

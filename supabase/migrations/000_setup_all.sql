@@ -141,28 +141,28 @@ begin
 end $$;
 
 insert into storage.buckets (id, name, public)
-values ('slider', 'slider', true)
+values ('sliders', 'sliders', true)
 on conflict (id) do nothing;
 
 alter table public.slider_slides enable row level security;
 drop policy if exists "slider_slides_select_all" on public.slider_slides;
 create policy "slider_slides_select_all" on public.slider_slides for select to public using (true);
 drop policy if exists "slider_slides_insert_all" on public.slider_slides;
-create policy "slider_slides_insert_all" on public.slider_slides for insert to public with check (true);
+create policy "slider_slides_insert_all" on public.slider_slides for insert to authenticated with check (auth.role = 'admin');
 drop policy if exists "slider_slides_update_all" on public.slider_slides;
-create policy "slider_slides_update_all" on public.slider_slides for update to public using (true) with check (true);
+create policy "slider_slides_update_all" on public.slider_slides for update to authenticated using (auth.role = 'admin') with check (auth.role = 'admin');
 drop policy if exists "slider_slides_delete_all" on public.slider_slides;
-create policy "slider_slides_delete_all" on public.slider_slides for delete to public using (true);
+create policy "slider_slides_delete_all" on public.slider_slides for delete to authenticated using (auth.role = 'admin');
 
 alter table storage.objects enable row level security;
-drop policy if exists "storage_slider_select_all" on storage.objects;
-create policy "storage_slider_select_all" on storage.objects for select to public using (bucket_id = 'slider');
-drop policy if exists "storage_slider_insert_all" on storage.objects;
-create policy "storage_slider_insert_all" on storage.objects for insert to public with check (bucket_id = 'slider');
-drop policy if exists "storage_slider_update_all" on storage.objects;
-create policy "storage_slider_update_all" on storage.objects for update to public using (bucket_id = 'slider') with check (bucket_id = 'slider');
-drop policy if exists "storage_slider_delete_all" on storage.objects;
-create policy "storage_slider_delete_all" on storage.objects for delete to public using (bucket_id = 'slider');
+drop policy if exists "storage_sliders_select_all" on storage.objects;
+create policy "storage_sliders_select_all" on storage.objects for select to public using (bucket_id = 'sliders');
+drop policy if exists "storage_sliders_insert_all" on storage.objects;
+create policy "storage_sliders_insert_all" on storage.objects for insert to authenticated with check (bucket_id = 'sliders' and auth.role = 'admin');
+drop policy if exists "storage_sliders_update_all" on storage.objects;
+create policy "storage_sliders_update_all" on storage.objects for update to authenticated using (bucket_id = 'sliders' and auth.role = 'admin') with check (bucket_id = 'sliders');
+drop policy if exists "storage_sliders_delete_all" on storage.objects;
+create policy "storage_sliders_delete_all" on storage.objects for delete to authenticated using (bucket_id = 'sliders');
 
 -- =====================================================================
 -- 003) NEWS + BUCKET + RLS + REALTIME

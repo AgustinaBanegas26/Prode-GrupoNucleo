@@ -37,6 +37,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SESSION_KEY = 'prode_auth_session_v1';
 
+async function setSupabaseAdminToken(token?: string) {
+  if (!token) return;
+  try {
+    await supabase.auth.setAuth(token);
+  } catch (e) {
+    console.warn('[Auth] setSupabaseAdminToken failed:', e);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [role, setRole] = useState<'client' | 'admin' | null>(null);
@@ -51,6 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const parsed = JSON.parse(raw) as SessionUser;
           setUser(parsed);
           setRole(parsed.role);
+          if (parsed.role === 'admin' && parsed.adminToken) {
+            await setSupabaseAdminToken(parsed.adminToken);
+          }
         }
       } catch (e) {
         console.error('Error restoring auth session:', e);
@@ -99,6 +111,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
     setUser(sessionUser);
     setRole(sessionUser.role);
+
+    if (sessionUser.role === 'admin' && sessionUser.adminToken) {
+      await setSupabaseAdminToken(sessionUser.adminToken);
+    } else {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore if already signed out
+      }
+    }
 
     try {
       if (sessionUser.role === 'client' && sessionUser.cliente_id) {
@@ -251,6 +273,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: 'client',
       };
 
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore previous admin session cleanup errors
+      }
+
       await saveSession(sessionUser);
       return { mustChangePassword: false, role: 'client' };
     }
@@ -258,6 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      await supabase.auth.signOut();
       await AsyncStorage.removeItem(SESSION_KEY);
       setUser(null);
       setRole(null);

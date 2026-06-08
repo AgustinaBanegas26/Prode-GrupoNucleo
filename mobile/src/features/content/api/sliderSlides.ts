@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../../../lib/supabase';
-import { deleteStorageObject, getPublicUrl, uploadImageFromUri } from '../../../lib/storage';
+import { deleteStorageObject, getPublicUrl, guessFileExt, uploadImageFromUri } from '../../../lib/storage';
 
 export type SliderSlideRow = {
-  id: number;
+  id: string;
   title: string;
   description: string;
   image_path: string;
@@ -35,16 +35,20 @@ export type SliderSlide = {
   createdAt: string;
 };
 
-const SLIDER_BUCKET = 'slider';
+const SLIDER_BUCKET = 'sliders';
 
-function makeNumericId(): number {
-  return Date.now();
+type UseSliderSlidesOptions = {
+  onlyActive?: boolean;
+};
+
+function parseSlideId(id: string | undefined): string | null {
+  if (!id) return null;
+  const trimmed = id.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function parseSlideId(id: string | undefined): number | null {
-  if (!id) return null;
-  const n = Number(id);
-  return Number.isFinite(n) && n > 0 ? n : null;
+function makeImagePath(ext: string): string {
+  return `slides/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
 }
 
 function mapRow(row: SliderSlideRow): SliderSlide {
@@ -66,16 +70,19 @@ function mapRow(row: SliderSlideRow): SliderSlide {
   };
 }
 
-export const sliderQueryKey = ['slider_slides'] as const;
+export function useSliderSlides(options: UseSliderSlidesOptions = {}) {
+  const onlyActive = options.onlyActive ?? true;
+  const queryKey = onlyActive ? ['slider_slides', 'active'] as const : ['slider_slides', 'all'] as const;
 
-export function useSliderSlides() {
   return useQuery({
-    queryKey: sliderQueryKey,
+    queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('slider_slides')
-        .select('*')
-        .order('sort_order', { ascending: true });
+      let query = supabase.from('slider_slides').select('*');
+      if (onlyActive) {
+        query = query.eq('is_active', true);
+      }
+
+      const { data, error } = await query.order('sort_order', { ascending: true });
       if (error) throw new Error(error.message);
       return (Array.isArray(data) ? data : []).map(mapRow);
     },
@@ -89,7 +96,7 @@ export function useSliderRealtime() {
     const channel = supabase
       .channel('slider-slides-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'slider_slides' }, () => {
-        qc.invalidateQueries({ queryKey: sliderQueryKey });
+        qc.invalidateQueries({ queryKey: ['slider_slides'] });
       })
       .subscribe();
 
@@ -118,24 +125,18 @@ export function useUpsertSliderSlide() {
       imagePath?: string;
     }) => {
       const existingId = parseSlideId(input.id);
-      const slideId = existingId ?? makeNumericId();
-
-      const ext = input.imageUri
-        ? (input.imageUri.split('.').pop() || 'jpg').split('?')[0]
-        : 'jpg';
-
-      const imagePath = input.imageUri
-        ? `slides/${slideId}.${ext}`
-        : input.imagePath;
-
-      if (!imagePath) throw new Error('Falta imagen');
+      const oldImagePath = input.imagePath;
+      let imagePath = input.imagePath;
 
       if (input.imageUri) {
+        const ext = guessFileExt(input.imageUri) ?? 'jpg';
+        imagePath = makeImagePath(ext);
         await uploadImageFromUri({ bucket: SLIDER_BUCKET, path: imagePath, uri: input.imageUri });
       }
 
+      if (!imagePath) throw new Error('Falta imagen');
+
       const payload = {
-        id: slideId,
         title: input.title,
         description: input.description,
         image_path: imagePath,
@@ -147,15 +148,44 @@ export function useUpsertSliderSlide() {
         is_active: input.active,
       };
 
-      const { error } = existingId
-        ? await supabase.from('slider_slides').update(payload).eq('id', existingId)
-        : await supabase.from('slider_slides').insert(payload);
+      if (existingId) {
+        const { error } = await supabase.from('slider_slides').update(payload).eq('id', existingId);
+        if (error) {
+          if (input.imageUri) {
+            await deleteStorageObject({ bucket: SLIDER_BUCKET, paths: [imagePath] }).catch(() => {});
+          }
+          throw new Error(error.message);
+        }
 
-      if (error) throw new Error(error.message);
-      return String(slideId);
+        if (input.imageUri && oldImagePath && oldImagePath !== imagePath) {
+          await deleteStorageObject({ bucket: SLIDER_BUCKET, paths: [oldImagePath] }).catch(() => {});
+        }
+
+        return existingId;
+      }
+
+      const { data, error } = await supabase
+        .from('slider_slides')
+        .insert(payload)
+        .select('id')
+        .maybeSingle();
+
+      if (error) {
+        if (input.imageUri) {
+          await deleteStorageObject({ bucket: SLIDER_BUCKET, paths: [imagePath] }).catch(() => {});
+        }
+        throw new Error(error.message);
+      }
+      if (!data?.id) {
+        if (input.imageUri) {
+          await deleteStorageObject({ bucket: SLIDER_BUCKET, paths: [imagePath] }).catch(() => {});
+        }
+        throw new Error('No se pudo crear el slider');
+      }
+      return String(data.id);
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: sliderQueryKey });
+      await qc.invalidateQueries({ queryKey: ['slider_slides'] });
     },
   });
 }
@@ -164,10 +194,10 @@ export function useDeleteSliderSlide() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; imagePath: string }) => {
-      const numericId = parseSlideId(input.id);
-      if (!numericId) throw new Error('ID de slide inválido');
+      const slideId = parseSlideId(input.id);
+      if (!slideId) throw new Error('ID de slide inválido');
 
-      const { error } = await supabase.from('slider_slides').delete().eq('id', numericId);
+      const { error } = await supabase.from('slider_slides').delete().eq('id', slideId);
       if (error) throw new Error(error.message);
 
       try {
@@ -177,7 +207,7 @@ export function useDeleteSliderSlide() {
       }
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: sliderQueryKey });
+      await qc.invalidateQueries({ queryKey: ['slider_slides'] });
     },
   });
 }
@@ -197,7 +227,7 @@ export function useReorderSliderSlides() {
       }
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: sliderQueryKey });
+      await qc.invalidateQueries({ queryKey: ['slider_slides'] });
     },
   });
 }

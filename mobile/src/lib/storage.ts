@@ -8,38 +8,85 @@ export type UploadImageResult = {
   publicUrl: string;
 };
 
-function guessFileExt(uri: string): string {
-  const clean = uri.split('?')[0] ?? uri;
-  const m = clean.match(/\.([a-zA-Z0-9]+)$/);
-  const ext = (m?.[1] ?? '').toLowerCase();
-  if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp') return ext;
-  return 'jpg';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'] as const;
+
+type ImageExtension = (typeof ALLOWED_EXTENSIONS)[number];
+
+function normalizeExtension(ext: string): ImageExtension | null {
+  const normalized = ext.toLowerCase();
+  return ALLOWED_EXTENSIONS.includes(normalized as ImageExtension)
+    ? (normalized as ImageExtension)
+    : null;
 }
 
-function contentTypeForExt(ext: string): string {
+export function guessFileExt(uri: string): ImageExtension | null {
+  const clean = uri.split('?')[0] ?? uri;
+  const m = clean.match(/\.([a-zA-Z0-9]+)$/);
+  return normalizeExtension(m?.[1] ?? '');
+}
+
+function extensionFromContentType(contentType?: string): ImageExtension | null {
+  if (!contentType) return null;
+  const normalized = contentType.split(';')[0].trim().toLowerCase();
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  return null;
+}
+
+function contentTypeForExt(ext: ImageExtension): string {
   if (ext === 'png') return 'image/png';
   if (ext === 'webp') return 'image/webp';
   return 'image/jpeg';
 }
 
+function validateImageSize(body: Blob | ArrayBuffer) {
+  const size = body instanceof ArrayBuffer ? body.byteLength : body.size;
+  if (size > MAX_IMAGE_BYTES) {
+    throw new Error('La imagen debe ser menor a 5 MB');
+  }
+}
+
 export function getPublicUrl(bucket: string, path: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  const { data, error } = supabase.storage.from(bucket).getPublicUrl(path);
+  if (error) {
+    throw new Error(`Error obteniendo URL pública: ${error.message}`);
+  }
   return data.publicUrl;
 }
 
 async function uriToUploadBody(uri: string): Promise<{ body: Blob | ArrayBuffer; contentType: string }> {
-  const ext = guessFileExt(uri);
-  const contentType = contentTypeForExt(ext);
-
   if (Platform.OS === 'web') {
     const res = await fetch(uri);
+    if (!res.ok) {
+      throw new Error('No se pudo cargar la imagen desde la URI.');
+    }
+
+    const contentTypeHeader = res.headers.get('content-type') ?? '';
+    const ext = extensionFromContentType(contentTypeHeader) ?? guessFileExt(uri);
+    if (!ext) {
+      throw new Error('Formato de imagen no válido. Usa jpg, jpeg, png o webp.');
+    }
+
     const arrayBuffer = await res.arrayBuffer();
-    return { body: arrayBuffer, contentType: res.headers.get('content-type') ?? contentType };
+    validateImageSize(arrayBuffer);
+    return { body: arrayBuffer, contentType: contentTypeHeader || contentTypeForExt(ext) };
   }
 
   const res = await fetch(uri);
+  if (!res.ok) {
+    throw new Error('No se pudo cargar la imagen desde la URI.');
+  }
+
   const blob = await res.blob();
-  return { body: blob, contentType: blob.type || contentType };
+  const ext = extensionFromContentType(blob.type) ?? guessFileExt(uri);
+  if (!ext) {
+    throw new Error('Formato de imagen no válido. Usa jpg, jpeg, png o webp.');
+  }
+
+  validateImageSize(blob);
+  return { body: blob, contentType: blob.type || contentTypeForExt(ext) };
 }
 
 export async function uploadImageFromUri(opts: {
