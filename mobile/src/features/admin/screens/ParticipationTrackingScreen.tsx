@@ -14,12 +14,9 @@ import { useRouter } from 'expo-router';
 import { useAppTheme } from '../../../providers/ThemeProvider';
 import { useAllPredictions } from '../../content/api/predictions';
 import { useUsersStore } from '../../users/store/usersStore';
-import { useAdminActivityStore } from '../store/adminActivityStore';
 
 const VERDE  = '#22C55E';
 const DORADO = '#F59E0B';
-
-const formatDateTime = (ts: number) => new Date(ts).toLocaleString('es-AR');
 
 function FadeSlide({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
   const opacity    = useRef(new Animated.Value(0)).current;
@@ -82,7 +79,6 @@ export function ParticipationTrackingScreen() {
 
   const users        = useUsersStore((s) => s.users);
   const refreshUsers = useUsersStore((s) => s.refresh);
-  const activity     = useAdminActivityStore((s) => s.items);
   const { data: allPredictions = [] } = useAllPredictions();
 
   useEffect(() => { refreshUsers(); }, [refreshUsers]);
@@ -91,13 +87,10 @@ export function ParticipationTrackingScreen() {
     const totalUsers   = users.length;
     const activeUsers  = users.filter((u) => u.activo).length;
     const blockedUsers = users.filter((u) => !u.activo).length;
-    const inactiveUsers = 0;
     const predictionsCount = allPredictions.length;
     const participationPct = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
-    return { totalUsers, activeUsers, inactiveUsers, blockedUsers, predictionsCount, participationPct };
+    return { totalUsers, activeUsers, blockedUsers, predictionsCount, participationPct };
   }, [users, allPredictions]);
-
-  const recent = useMemo(() => activity.slice(0, 12), [activity]);
 
   const bg      = isDark ? '#0D0D0D' : '#F5F7FA';
   const cardBg  = isDark ? 'rgba(255,255,255,0.05)' : '#fff';
@@ -130,10 +123,10 @@ export function ParticipationTrackingScreen() {
       <View style={s.content}>
         <FadeSlide delay={60}>
           <View style={s.statsRow}>
-            <StatMini icon="account-multiple" value={stats.totalUsers}    label="Usuarios"   accentDark={VERDE}     accentLight="#16a34a" bgLight="#dcfce7" isDark={isDark} />
-            <StatMini icon="account-check"    value={stats.activeUsers}   label="Activos"    accentDark="#38bdf8"   accentLight="#0284c7" bgLight="#e0f2fe" isDark={isDark} />
-            <StatMini icon="account-clock"    value={stats.inactiveUsers} label="Inactivos"  accentDark={DORADO}    accentLight="#d97706" bgLight="#fef3c7" isDark={isDark} />
-            <StatMini icon="account-lock"     value={stats.blockedUsers}  label="Bloqueados" accentDark="#ef4444"   accentLight="#dc2626" bgLight="#fee2e2" isDark={isDark} />
+            <StatMini icon="account-multiple" value={stats.totalUsers}    label="Registrados" accentDark="#38bdf8"   accentLight="#0284c7" bgLight="#e0f2fe" isDark={isDark} />
+            <StatMini icon="account-check"    value={stats.activeUsers}   label="Habilitados" accentDark={VERDE}     accentLight="#16a34a" bgLight="#dcfce7" isDark={isDark} />
+            <StatMini icon="account-lock"     value={stats.blockedUsers}  label="Bloqueados"  accentDark="#ef4444"   accentLight="#dc2626" bgLight="#fee2e2" isDark={isDark} />
+            <StatMini icon="soccer"           value={stats.predictionsCount} label="Predicciones" accentDark={DORADO}    accentLight="#d97706" bgLight="#fef3c7" isDark={isDark} />
           </View>
         </FadeSlide>
 
@@ -145,47 +138,23 @@ export function ParticipationTrackingScreen() {
             </View>
             <View style={s.bigRow}>
               <Text style={[s.bigNum, { color: VERDE }]}>{stats.participationPct}%</Text>
-              <Text style={[s.bigSub, { color: subC }]}>{stats.activeUsers} de {stats.totalUsers} activos</Text>
+              <Text style={[s.bigSub, { color: subC }]}>{stats.activeUsers} de {stats.totalUsers} habilitados</Text>
             </View>
             <AnimatedProgress value={stats.participationPct} color1={VERDE} color2={DORADO} isDark={isDark} />
           </View>
         </FadeSlide>
 
         <FadeSlide delay={180}>
-          <View style={[s.glassCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <View style={[s.glassCard, { backgroundColor: cardBg, borderColor: border, marginBottom: 32 }]}>
             <View style={s.cardHeader}>
               <MaterialCommunityIcons name="soccer" size={18} color="#38bdf8" />
-              <Text style={[s.cardTitle, { color: titleC }]}>Pronósticos registrados</Text>
+              <Text style={[s.cardTitle, { color: titleC }]}>Predicciones realizadas</Text>
             </View>
             <View style={s.bigRow}>
               <Text style={[s.bigNum, { color: '#38bdf8' }]}>{stats.predictionsCount}</Text>
               <Text style={[s.bigSub, { color: subC }]}>Total acumulado</Text>
             </View>
-            <AnimatedProgress value={Math.min((stats.predictionsCount / 500) * 100, 100)} color1="#38bdf8" color2="#6366f1" isDark={isDark} />
-          </View>
-        </FadeSlide>
-
-        <FadeSlide delay={240}>
-          <View style={[s.glassCard, { backgroundColor: cardBg, borderColor: border, marginBottom: 32 }]}>
-            <View style={s.cardHeader}>
-              <MaterialCommunityIcons name="history" size={18} color={DORADO} />
-              <Text style={[s.cardTitle, { color: titleC }]}>Actividad reciente</Text>
-            </View>
-            {recent.length === 0 ? (
-              <Text style={[s.empty, { color: subC }]}>Sin actividad registrada todavía.</Text>
-            ) : (
-              <View style={s.recentList}>
-                {recent.map((it) => (
-                  <View key={it.id} style={s.recentItem}>
-                    <View style={[s.recentDot, { backgroundColor: dotC }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.recentTitle, { color: titleC }]} numberOfLines={1}>{it.title}</Text>
-                      <Text style={[s.recentMeta, { color: subC }]} numberOfLines={1}>{it.module} · {formatDateTime(it.createdAt)}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
+            <AnimatedProgress value={Math.min((stats.predictionsCount / Math.max(stats.totalUsers * 10, 1)) * 100, 100)} color1="#38bdf8" color2="#6366f1" isDark={isDark} />
           </View>
         </FadeSlide>
       </View>

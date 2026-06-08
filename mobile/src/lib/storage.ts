@@ -49,10 +49,7 @@ function validateImageSize(body: Blob | ArrayBuffer) {
 }
 
 export function getPublicUrl(bucket: string, path: string): string {
-  const { data, error } = supabase.storage.from(bucket).getPublicUrl(path);
-  if (error) {
-    throw new Error(`Error obteniendo URL pública: ${error.message}`);
-  }
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
 

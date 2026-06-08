@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { LoadingScreen } from '../src/components/LoadingScreen';
-import { UpdateGate } from '../src/components/UpdateGate';
 import { queryClient } from '../src/lib/queryClient';
 import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
@@ -106,9 +105,7 @@ export default function RootLayout() {
           <AuthProvider>
             <RecoveryLinkListener />
             <AuthGate>
-              <UpdateGate>
-                <Slot />
-              </UpdateGate>
+              <Slot />
             </AuthGate>
           </AuthProvider>
         </ThemeProvider>
@@ -116,4 +113,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-

@@ -54,8 +54,9 @@ export const useUsersStore = create<UsersStore>((set, get) => ({
       set({ _realtimeRefCount: get()._realtimeRefCount + 1 });
       return () => {
         const nextCount = Math.max(0, get()._realtimeRefCount - 1);
-        if (nextCount === 0 && get()._realtimeChannel) {
-          supabase.removeChannel(get()._realtimeChannel);
+        const chan = get()._realtimeChannel;
+        if (nextCount === 0 && chan) {
+          supabase.removeChannel(chan);
           set({ _realtimeChannel: null, isRealtimeConnected: false });
         }
         set({ _realtimeRefCount: nextCount });
@@ -89,8 +90,9 @@ export const useUsersStore = create<UsersStore>((set, get) => ({
 
       return () => {
         const nextCount = Math.max(0, get()._realtimeRefCount - 1);
-        if (nextCount === 0 && get()._realtimeChannel) {
-          supabase.removeChannel(get()._realtimeChannel);
+        const chan = get()._realtimeChannel;
+        if (nextCount === 0 && chan) {
+          supabase.removeChannel(chan);
           set({ _realtimeChannel: null, isRealtimeConnected: false });
         }
         set({ _realtimeRefCount: nextCount });

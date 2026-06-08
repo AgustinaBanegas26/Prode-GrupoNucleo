@@ -461,6 +461,17 @@ export default function ProfileScreen() {
             </FadeSlide>
           )}
 
+          {/* ══ BASES Y CONDICIONES ══ */}
+          <FadeSlide delay={210}>
+            <Pressable
+              onPress={() => router.push('/(app)/terminos-y-condiciones')}
+              style={({ pressed }) => [logoutS.btn, { borderColor: theme.colors.border, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.05)' : '#fff', opacity: pressed ? 0.7 : 1, marginBottom: 12 }]}
+            >
+              <Ionicons name="document-text-outline" size={18} color={theme.colors.text} />
+              <Text style={[logoutS.text, { color: theme.colors.text }]}>Bases y Condiciones</Text>
+            </Pressable>
+          </FadeSlide>
+
           {/* ══ CERRAR SESIÓN ══ */}
           <FadeSlide delay={240}>
             <Pressable

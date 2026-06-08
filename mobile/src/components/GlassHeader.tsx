@@ -10,18 +10,14 @@ interface GlassHeaderProps {
   userName: string;
   userInitials: string;
   position: number;
-  onNotificationsPress?: () => void;
   onMenuPress?: () => void;
-  hasUnreadNotifications?: boolean;
 }
 
 export function GlassHeader({
   userName,
   userInitials,
   position,
-  onNotificationsPress,
   onMenuPress,
-  hasUnreadNotifications = false,
 }: GlassHeaderProps) {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -63,21 +59,7 @@ export function GlassHeader({
 
       {/* Right: acciones */}
       <View style={styles.rightSection}>
-        <Pressable
-          onPress={onNotificationsPress}
-          style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' }]}
-          accessibilityLabel="Notificaciones"
-          accessibilityRole="button"
-        >
-          <Feather name="bell" size={20} color={theme.colors.text} />
-          {hasUnreadNotifications && (
-            <View
-              style={[styles.notifBadge, { backgroundColor: theme.colors.primary }]}
-              accessibilityRole="alert"
-              accessibilityLabel="Notificaciones sin leer"
-            />
-          )}
-        </Pressable>
+
         <Pressable
           onPress={onMenuPress}
           style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' }]}
@@ -149,14 +131,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  notifBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
+
 });

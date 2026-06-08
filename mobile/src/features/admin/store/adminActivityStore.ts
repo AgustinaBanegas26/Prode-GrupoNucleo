@@ -7,7 +7,6 @@ export type AdminActivityModule =
   | 'auth'
   | 'users'
   | 'matches'
-  | 'notifications'
   | 'images'
   | 'slider'
   | 'news'
@@ -15,7 +14,8 @@ export type AdminActivityModule =
   | 'rankings'
   | 'reports'
   | 'participation'
-  | 'branding';
+  | 'branding'
+  | 'system_states';
 
 export type AdminActivity = {
   id: string;

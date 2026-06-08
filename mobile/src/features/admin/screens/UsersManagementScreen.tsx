@@ -73,13 +73,65 @@ function UserCard({
   user: AppUser;
   theme: any;
   isDark: boolean;
-  onToggleActive: () => void;
+  onToggleActive: (val: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onResetPassword: () => void;
   rankPosition?: number;
   rankPoints?: number;
 }) {
+  // Dynamic status badges
+  const statusInfo = useMemo(() => {
+    if (!user.activo) {
+      return { label: "Bloqueado", color: "#EF4444", icon: "account-cancel" };
+    }
+    if (!user.ultimoAcceso) {
+      return { label: "Inactivo", color: "#94A3B8", icon: "account-outline" };
+    }
+    const diffMinutes = (Date.now() - user.ultimoAcceso) / 60000;
+    if (diffMinutes <= 5) {
+      return { label: "Conectado", color: "#22C55E", icon: "account-check" };
+    }
+    return { label: "Desconectado", color: "#3DA5F5", icon: "account" };
+  }, [user.activo, user.ultimoAcceso]);
+
+  // Format registration date
+  const regDateStr = useMemo(() => {
+    if (!user.createdAt) return "—";
+    return new Date(user.createdAt).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }, [user.createdAt]);
+
+  // Format last access date
+  const accessDateStr = useMemo(() => {
+    if (!user.ultimoAcceso) return "Nunca";
+    return new Date(user.ultimoAcceso).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [user.ultimoAcceso]);
+
+  // Status Action Sheet
+  const handleStatusActions = () => {
+    Alert.alert(
+      "Gestión de Estado de Usuario",
+      `Seleccioná una acción para ${user.nombre}:`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "🟢 Activar", onPress: () => onToggleActive(true) },
+        { text: "🔴 Desactivar", onPress: () => onToggleActive(false) },
+        { text: "🔒 Bloquear", style: "destructive", onPress: () => onToggleActive(false) },
+        { text: "🔓 Desbloquear", onPress: () => onToggleActive(true) },
+      ]
+    );
+  };
+
   return (
     <View
       style={[
@@ -98,72 +150,73 @@ function UserCard({
           <Image source={{ uri: user.avatarUrl }} style={us.avatarImg} resizeMode="cover" />
         ) : (
           <Text style={us.avatarText}>
-            {(user.nombre || 'C').substring(0, 2).toUpperCase()}
+            {(user.nombre || "C").substring(0, 2).toUpperCase()}
           </Text>
         )}
       </View>
 
       <View style={us.body}>
-        <Text style={[us.name, { color: theme.colors.text }]}>{user.nombre}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Text style={[us.name, { color: theme.colors.text }]} numberOfLines={1}>
+            {user.nombre}
+          </Text>
+          <View style={[us.statusBadge, { backgroundColor: statusInfo.color + "15" }]}>
+            <Text style={[us.statusText, { color: statusInfo.color }]}>
+              {statusInfo.label}
+            </Text>
+          </View>
+        </View>
+        
         <Text style={[us.email, { color: theme.colors.muted }]}>
           ID cliente: {user.clienteId}
         </Text>
+        
         <View style={us.metaRow}>
           <MaterialCommunityIcons
-            name="badge-account"
-            size={12}
-            color={isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)"}
+            name="calendar"
+            size={11}
+            color={theme.colors.muted}
           />
-          <Text
-            style={[
-              us.meta,
-              { color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)" },
-            ]}
-          >
-            Cliente ID: {user.clienteId}
+          <Text style={[us.meta, { color: theme.colors.muted }]}>
+            Reg: {regDateStr}
           </Text>
           <View style={us.dot} />
           <MaterialCommunityIcons
-            name="key"
-            size={12}
-            color={isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)"}
+            name="login"
+            size={11}
+            color={theme.colors.muted}
           />
-          <Text
-            style={[
-              us.meta,
-              { color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)" },
-            ]}
-          >
-            {user.primerLogin ? "Primer login" : "Activo"}
+          <Text style={[us.meta, { color: theme.colors.muted }]} numberOfLines={1}>
+            Acceso: {accessDateStr}
           </Text>
-          {rankPoints != null ? (
-            <>
-              <View style={us.dot} />
-              <MaterialCommunityIcons name="trophy" size={12} color={CELESTE_DARK} />
-              <Text style={[us.meta, { color: CELESTE_DARK }]}>
-                #{rankPosition ?? "—"} · {rankPoints} pts
-              </Text>
-            </>
-          ) : null}
         </View>
+
+        {rankPoints != null ? (
+          <View style={[us.metaRow, { marginTop: 2 }]}>
+            <MaterialCommunityIcons name="trophy" size={11} color={CELESTE_DARK} />
+            <Text style={[us.meta, { color: CELESTE_DARK }]}>
+              Ranking: #{rankPosition ?? "—"} · {rankPoints} pts
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={us.actions}>
         <Pressable
-          onPress={onToggleActive}
+          onPress={handleStatusActions}
           style={[
             us.iconBtn,
             {
               backgroundColor: user.activo
                 ? "rgba(34, 197, 94, 0.12)"
-                : "rgba(245, 158, 11, 0.12)",
+                : "rgba(239, 68, 68, 0.12)",
             },
           ]}
         >
           <MaterialCommunityIcons
-            name={user.activo ? "eye" : "eye-off"}
+            name={user.activo ? "shield-check" : "shield-alert"}
             size={16}
-            color={user.activo ? "#22C55E" : "#F59E0B"}
+            color={user.activo ? "#22C55E" : "#EF4444"}
           />
         </Pressable>
         <Pressable
@@ -239,6 +292,16 @@ const us = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
 });
 
 export function UsersManagementScreen() {
@@ -258,9 +321,9 @@ export function UsersManagementScreen() {
   const rankingByCliente = useMemo(() => {
     const map = new Map<string, { position: number; points: number }>();
     ranking.forEach((r) => {
-      map.set(String(r.cliente_id), {
+      map.set(String(r.id), {
         position: r.position ?? 0,
-        points: r.total_points,
+        points: r.points,
       });
     });
     return map;
@@ -293,13 +356,13 @@ export function UsersManagementScreen() {
     return arr;
   }, [users, query, statusFilter]);
 
-  const handleToggleActive = async (user: AppUser) => {
+  const handleToggleActive = async (user: AppUser, val: boolean) => {
     try {
-      await setActivo(user.id, !user.activo);
+      await setActivo(user.id, val);
       log({
         action: "toggle",
         module: "users",
-        title: "Usuario " + (!user.activo ? "activado" : "desactivado"),
+        title: val ? "Usuario activado/desbloqueado" : "Usuario desactivado/bloqueado",
         detail: `${user.nombre} · ${user.clienteId}`,
       });
     } catch (e) {
@@ -533,7 +596,7 @@ export function UsersManagementScreen() {
                   isDark={isDark}
                   rankPosition={rankingByCliente.get(String(user.clienteId))?.position}
                   rankPoints={rankingByCliente.get(String(user.clienteId))?.points}
-                  onToggleActive={() => handleToggleActive(user)}
+                  onToggleActive={(val) => handleToggleActive(user, val)}
                   onEdit={() => handleEdit(user)}
                   onDelete={() => handleDelete(user)}
                   onResetPassword={() => handleResetPassword(user)}

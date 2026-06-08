@@ -20,20 +20,6 @@ export async function adminLogin(usuario: string, password: string): Promise<{ t
   return { token: json.token };
 }
 
-export async function fetchAppVersion(): Promise<{
-  version: string;
-  versionCode: number;
-  apkUrl: string | null;
-  forceUpdate: boolean;
-  changelog: string;
-}> {
-  if (!BASE_URL) {
-    throw new Error('EXPO_PUBLIC_BACKEND_URL no configurada');
-  }
-  const res = await fetch(`${BASE_URL}/app/version`);
-  if (!res.ok) throw new Error('No se pudo obtener versión');
-  return res.json();
-}
 
 export async function adminApiFetch<T>(
   path: string,

@@ -10,7 +10,7 @@ function isNewUser(id: string | undefined): boolean {
   return !Number.isFinite(n) || n <= 0;
 }
 
-function mapRowToUser(row: Record<string, unknown>): AppUser {
+export function mapRowToUser(row: Record<string, unknown>): AppUser {
   return {
     id: String(row.id),
     clienteId: String(row.cliente_id),

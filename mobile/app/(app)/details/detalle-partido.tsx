@@ -234,7 +234,7 @@ export default function MatchDetailsScreen() {
                     <Text style={[s.exactTeamName, { color: theme.colors.textSecondary }]} numberOfLines={1}>{match.home_team}</Text>
                     <TextInput
                       style={[s.exactInput, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                      value={scoreH} onChangeText={v => setScoreH(v.replace(/[^0-9]/g, '').slice(0, 2))}
+                      value={scoreH} onChangeText={(v: string) => setScoreH(v.replace(/[^0-9]/g, '').slice(0, 2))}
                       keyboardType="number-pad" maxLength={2} placeholder="0"
                       placeholderTextColor={theme.colors.placeholder} textAlign="center"
                       // @ts-ignore web
@@ -246,7 +246,7 @@ export default function MatchDetailsScreen() {
                     <Text style={[s.exactTeamName, { color: theme.colors.textSecondary }]} numberOfLines={1}>{match.away_team}</Text>
                     <TextInput
                       style={[s.exactInput, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-                      value={scoreA} onChangeText={v => setScoreA(v.replace(/[^0-9]/g, '').slice(0, 2))}
+                      value={scoreA} onChangeText={(v: string) => setScoreA(v.replace(/[^0-9]/g, '').slice(0, 2))}
                       keyboardType="number-pad" maxLength={2} placeholder="0"
                       placeholderTextColor={theme.colors.placeholder} textAlign="center"
                       // @ts-ignore web

@@ -139,19 +139,38 @@ export function StatisticsScreen() {
     {
       icon: "account-multiple",
       value: stats?.totalUsers ?? 0,
-      label: "Usuarios Totales",
+      label: "Usuarios registrados",
     },
     {
       icon: "account-check",
       value: stats?.activeUsers ?? 0,
-      label: "Usuarios Activos",
+      label: "Usuarios activos",
+    },
+    {
+      icon: "account-cancel",
+      value: stats?.blockedUsers ?? 0,
+      label: "Usuarios bloqueados",
     },
     {
       icon: "soccer",
-      value: stats?.totalPredictions ?? 0,
-      label: "Pronósticos",
+      value: stats?.totalMatches ?? 0,
+      label: "Partidos cargados",
     },
-    { icon: "trending-up", value: stats?.totalUsers ? `${Math.round((stats.activeUsers / stats.totalUsers) * 100)}%` : "0%", label: "Participación" },
+    {
+      icon: "chart-bubble",
+      value: stats?.totalPredictions ?? 0,
+      label: "Predicciones realizadas",
+    },
+    {
+      icon: "newspaper-variant",
+      value: stats?.totalNews ?? 0,
+      label: "Noticias publicadas",
+    },
+    {
+      icon: "image-multiple",
+      value: stats?.totalSlider ?? 0,
+      label: "Imágenes del slider",
+    },
   ];
 
   return (

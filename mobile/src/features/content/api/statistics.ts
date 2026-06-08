@@ -5,7 +5,11 @@ import { useEffect } from 'react';
 export type StatisticsData = {
   totalUsers: number;
   activeUsers: number;
+  blockedUsers: number;
+  totalMatches: number;
   totalPredictions: number;
+  totalNews: number;
+  totalSlider: number;
   avgAccuracy: number;
   participationByDay: { label: string; value: number }[];
 };
@@ -16,24 +20,44 @@ export function useStatistics() {
   return useQuery({
     queryKey: statisticsQueryKey,
     queryFn: async (): Promise<StatisticsData> => {
-      // Get total users
-      const { count: totalUsers, error: usersError } = await supabase
+      // Get total users (Registered)
+      const { count: totalUsers } = await supabase
         .from('clientes')
         .select('*', { count: 'exact', head: true });
-      if (usersError) throw usersError;
 
-      // Get active users
-      const { count: activeUsers, error: activeError } = await supabase
+      // Get active users (who accessed at least once)
+      const { count: activeUsers } = await supabase
         .from('clientes')
         .select('*', { count: 'exact', head: true })
-        .eq('habilitado', true);
-      if (activeError) throw activeError;
+        .not('ultimo_acceso', 'is', null);
 
-      // Get total predictions
-      const { count: totalPredictions, error: predError } = await supabase
+      // Get blocked users
+      const { count: blockedUsers } = await supabase
+        .from('clientes')
+        .select('*', { count: 'exact', head: true })
+        .eq('habilitado', false);
+
+      // Get total matches (loaded)
+      const { count: totalMatches } = await supabase
+        .from('matches')
+        .select('*', { count: 'exact', head: true });
+
+      // Get total predictions (realizadas)
+      const { count: totalPredictions } = await supabase
         .from('predictions')
         .select('*', { count: 'exact', head: true });
-      if (predError) throw predError;
+
+      // Get news count (published)
+      const { count: totalNews } = await supabase
+        .from('news')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'published');
+
+      // Get slider images count (active)
+      const { count: totalSlider } = await supabase
+        .from('slider_slides')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
 
       // Real participation by day — count predictions per day of the week
       let participationByDay: { label: string; value: number }[] = [
@@ -46,7 +70,8 @@ export function useStatistics() {
         { label: 'Dom', value: 0 },
       ];
 
-      if (totalPredictions && totalPredictions > 0) {
+      const predictionsCount = totalPredictions ?? 0;
+      if (predictionsCount > 0) {
         const { data: predRows } = await supabase
           .from('predictions')
           .select('created_at')
@@ -75,9 +100,13 @@ export function useStatistics() {
       }
 
       return {
-        totalUsers: totalUsers || 0,
-        activeUsers: activeUsers || 0,
-        totalPredictions: totalPredictions || 0,
+        totalUsers: totalUsers ?? 0,
+        activeUsers: activeUsers ?? 0,
+        blockedUsers: blockedUsers ?? 0,
+        totalMatches: totalMatches ?? 0,
+        totalPredictions: predictionsCount,
+        totalNews: totalNews ?? 0,
+        totalSlider: totalSlider ?? 0,
         avgAccuracy,
         participationByDay,
       };

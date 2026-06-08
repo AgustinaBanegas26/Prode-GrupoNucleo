@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 
 import { adminLogin } from '../lib/backendApi';
 import { supabase } from '../lib/supabase';
-import { registerPushToken } from '../services/pushNotifications';
+
 
 export interface SessionUser {
   id: string;
@@ -40,7 +40,7 @@ const SESSION_KEY = 'prode_auth_session_v1';
 async function setSupabaseAdminToken(token?: string) {
   if (!token) return;
   try {
-    await supabase.auth.setAuth(token);
+    (supabase as any).rest.headers['Authorization'] = `Bearer ${token}`;
   } catch (e) {
     console.warn('[Auth] setSupabaseAdminToken failed:', e);
   }
@@ -157,21 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    try {
-      if (sessionUser.role === 'client' && sessionUser.cliente_id) {
-        await registerPushToken({
-          userRole: 'client',
-          clienteId: sessionUser.cliente_id,
-        });
-      } else if (sessionUser.role === 'admin') {
-        await registerPushToken({
-          userRole: 'admin',
-          adminId: sessionUser.admin_id ?? sessionUser.id,
-        });
-      }
-    } catch (e) {
-      console.warn('[Auth] push register:', e);
-    }
+
   };
 
   const login = async (identifier: string, password: string): Promise<LoginResult> => {
