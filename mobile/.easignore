@@ -1,0 +1,18 @@
+# Native folders are regenerated on EAS (prebuild)
+android/
+ios/
+
+# Expo local cache
+.expo/
+dist/
+web-build/
+
+# Backend / infra not needed for the mobile binary
+supabase/
+
+# Dev-only tooling
+scripts/
+docs/
+
+# Dependencies are installed on the build server
+node_modules/

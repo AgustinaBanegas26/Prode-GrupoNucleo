@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Supabase (infra local; no forma parte del binario de la app)
+supabase/
+
+# Scripts de desarrollo (generación de iconos, etc.)
+scripts/
+
+# Documentación interna
+docs/
