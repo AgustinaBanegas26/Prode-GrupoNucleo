@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
-import bcrypt from 'bcryptjs';
 
 import { supabase } from '../../lib/supabase';
+import { syncLegacyPasswordByEmail } from './legacyPasswordService';
 
 export type PasswordRecoveryErrorCode =
   | 'invalid_email'
@@ -326,59 +326,10 @@ export async function updatePassword(newPassword: string): Promise<void> {
   }
 
   if (userEmail) {
-    await syncPasswordHashToLegacyTables(newPassword, userEmail);
+    await syncLegacyPasswordByEmail(userEmail, newPassword);
   }
 
   await supabase.auth.signOut();
-}
-
-/**
- * Mantiene compatibilidad con tablas legacy (admins/clientes) que usan bcrypt.
- */
-async function syncPasswordHashToLegacyTables(
-  newPassword: string,
-  email: string,
-): Promise<void> {
-  const salt = await bcrypt.genSalt(10);
-  const hash = await bcrypt.hash(newPassword, salt);
-
-  const { data: admin } = await supabase
-    .from('admins')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (admin?.id) {
-    await supabase
-      .from('admins')
-      .update({
-        password_hash: hash,
-        primer_login: false,
-        must_change_password: false,
-      })
-      .eq('id', admin.id);
-    return;
-  }
-
-  const { data: client } = await supabase
-    .from('clientes')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (client?.id) {
-    await supabase
-      .from('clientes')
-      .update({
-        password_hash: hash,
-        primer_login: false,
-        must_change_password: false,
-        ultimo_acceso: new Date().toISOString(),
-        password_actualizada: true,
-        fecha_cambio_password: new Date().toISOString(),
-      })
-      .eq('id', client.id);
-  }
 }
 
 /**

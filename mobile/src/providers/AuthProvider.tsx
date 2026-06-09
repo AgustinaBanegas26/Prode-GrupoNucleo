@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import bcrypt from 'bcryptjs';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-import { adminLogin } from '../lib/backendApi';
+import { adminLogin, getBackendUrl } from '../lib/backendApi';
 import { supabase } from '../lib/supabase';
+import {
+  updateLegacyPassword,
+  verifyLegacyPassword,
+} from '../services/auth/legacyPasswordService';
 
 
 export interface SessionUser {
@@ -207,15 +210,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { mustChangePassword: true, tempUser, role: 'admin' };
       }
 
-      const match = await bcrypt.compare(password, admin.password_hash || '');
-      if (!match) throw new Error('Contraseña incorrecta');
-
       let adminToken: string | undefined;
-      try {
-        const jwt = await adminLogin(cleanIdentifier, password);
-        adminToken = jwt.token;
-      } catch (e) {
-        console.warn('[AUTH] admin JWT no disponible:', e);
+      if (getBackendUrl()) {
+        try {
+          const jwt = await adminLogin(cleanIdentifier, password);
+          adminToken = jwt.token;
+        } catch (e) {
+          throw new Error(e instanceof Error ? e.message : 'Contraseña incorrecta');
+        }
+      } else {
+        const match = await verifyLegacyPassword('admin', String(admin.id), password);
+        if (!match) throw new Error('Contraseña incorrecta');
       }
 
       const sessionUser: SessionUser = {
@@ -278,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { mustChangePassword: true, tempUser, role: 'client' };
       }
 
-      const match = await bcrypt.compare(password, client.password_hash || '');
+      const match = await verifyLegacyPassword('client', String(client.id), password);
       if (!match) throw new Error('Contraseña incorrecta');
 
       // Update last access
@@ -317,65 +322,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const changePassword = async (tempUser: SessionUser, newPassword: string) => {
-    console.log('[CHANGE_PW] iniciando para user:', JSON.stringify(tempUser));
-
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(newPassword, salt);
-    console.log('[CHANGE_PW] hash generado');
-
-    if (tempUser.role === 'admin') {
-      console.log('[CHANGE_PW] actualizando admins, id:', tempUser.id);
-      const { data, error } = await supabase
-        .from('admins')
-        .update({ password_hash: hash, primer_login: false, must_change_password: false })
-        .eq('id', tempUser.id)
-        .select();
-
-      console.log('[CHANGE_PW] resultado admins:', JSON.stringify({ data, error }));
-      if (error) throw new Error(`Error al cambiar contraseña: ${error.message}`);
-    } else {
-      console.log('[CHANGE_PW] actualizando clientes, id:', tempUser.id, 'cliente_id:', tempUser.cliente_id);
-      // Intentar con id primero, si no matchea usar cliente_id
-      const { data, error } = await supabase
-        .from('clientes')
-        .update({
-          password_hash: hash,
-          primer_login: false,
-          must_change_password: false,
-          ultimo_acceso: new Date().toISOString(),
-          password_actualizada: true,
-          fecha_cambio_password: new Date().toISOString(),
-        })
-        .eq('id', tempUser.id)
-        .select();
-
-      console.log('[CHANGE_PW] resultado clientes:', JSON.stringify({ data, error }));
-      if (error) throw new Error(`Error al cambiar contraseña: ${error.message}`);
-
-      // Si no actualizó ninguna fila, intentar con cliente_id
-      if (!data || data.length === 0) {
-        console.log('[CHANGE_PW] sin filas con id, reintentando con cliente_id:', tempUser.cliente_id);
-        const { data: data2, error: error2 } = await supabase
-          .from('clientes')
-          .update({
-            password_hash: hash,
-            primer_login: false,
-            must_change_password: false,
-            ultimo_acceso: new Date().toISOString(),
-            password_actualizada: true,
-            fecha_cambio_password: new Date().toISOString(),
-          })
-          .eq('cliente_id', tempUser.cliente_id)
-          .select();
-
-        console.log('[CHANGE_PW] resultado clientes (cliente_id):', JSON.stringify({ data: data2, error: error2 }));
-        if (error2) throw new Error(`Error al cambiar contraseña: ${error2.message}`);
-      }
-    }
+    await updateLegacyPassword(
+      tempUser.role,
+      tempUser.id,
+      newPassword,
+      tempUser.cliente_id,
+    );
 
     const updatedUser = { ...tempUser, mustChangePassword: false };
     await saveSession(updatedUser);
-    console.log('[CHANGE_PW] sesión actualizada, mustChangePassword=false');
   };
 
   const value = useMemo(

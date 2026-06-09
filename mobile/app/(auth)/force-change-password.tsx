@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -20,8 +19,9 @@ import {
   type ForceChangePasswordFormValues,
   forceChangePasswordSchema,
 } from '../../src/features/auth/schemas';
-import { supabase } from '../../src/lib/supabase';
 import { useAuth } from '../../src/providers/AuthProvider';
+import { supabase } from '../../src/lib/supabase';
+import { verifyLegacyPassword } from '../../src/services/auth/legacyPasswordService';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
 
 const CELESTE_DARK = '#3DA5F5';
@@ -32,23 +32,20 @@ async function validateCurrentPassword(
   role: 'client' | 'admin',
   currentPassword: string,
 ): Promise<boolean> {
-  if (role === 'admin') {
-    const { data } = await supabase
-      .from('admins')
-      .select('password_hash, primer_login')
-      .eq('id', userId)
-      .maybeSingle();
-    if (data?.primer_login) return currentPassword === 'admingn123!';
-    return bcrypt.compare(currentPassword, data?.password_hash || '');
-  }
-
+  const table = role === 'admin' ? 'admins' : 'clientes';
   const { data } = await supabase
-    .from('clientes')
-    .select('password_hash, primer_login')
+    .from(table)
+    .select('primer_login')
     .eq('id', userId)
     .maybeSingle();
-  if (data?.primer_login) return currentPassword === 'clientesgn123';
-  return bcrypt.compare(currentPassword, data?.password_hash || '');
+
+  if (data?.primer_login) {
+    return role === 'admin'
+      ? currentPassword === 'admingn123!'
+      : currentPassword === 'clientesgn123';
+  }
+
+  return verifyLegacyPassword(role, userId, currentPassword);
 }
 
 export default function ForceChangePasswordScreen() {
