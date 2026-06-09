@@ -9,6 +9,7 @@ import { ThemeProvider } from '../src/providers/ThemeProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 import { subscribeToPasswordRecoveryLinks } from '../src/services/auth/passwordRecoveryService';
 import { useAutoScoringSync } from '../src/hooks/useAutoScoringSync';
+import { useFixtureDbSync } from '../src/hooks/useFixtureDbSync';
 
 const PUBLIC_AUTH_ROUTES = new Set([
   'login',
@@ -104,6 +105,12 @@ function AutoScoringSyncListener() {
   return null;
 }
 
+function FixtureDbSyncListener() {
+  const { user, loading } = useAuth();
+  useFixtureDbSync(!loading && !!user);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -111,6 +118,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <RecoveryLinkListener />
+            <FixtureDbSyncListener />
             <AutoScoringSyncListener />
             <AuthGate>
               <Slot />

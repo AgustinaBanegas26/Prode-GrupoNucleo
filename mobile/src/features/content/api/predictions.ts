@@ -3,6 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../../../lib/supabase';
 import { logActivity } from '../../admin/services/activityLogs';
+import { PREDICTION_LOCKED_MESSAGE } from '../../../utils/predictionLock';
+
+function parsePredictionError(error: unknown, fallback: string): string {
+  const msg = error instanceof Error ? error.message : String(error ?? fallback);
+  if (msg.includes('PREDICTION_LOCKED')) return PREDICTION_LOCKED_MESSAGE;
+  if (msg.includes('MATCH_NOT_FOUND')) return 'El partido no está disponible para pronósticos.';
+  return msg || fallback;
+}
 
 // ── Tipos (schema real de Supabase) ──────────────────────────
 // predictions: id, cliente_id, fixture_id, pick_winner,
@@ -119,7 +127,6 @@ export function useUpsertPrediction() {
 
   return useMutation({
     mutationFn: async (input: UpsertPredictionInput) => {
-      // Verificar si ya existe un pronóstico para este cliente + partido
       const { data: existing } = await supabase
         .from('predictions')
         .select('id')
@@ -128,37 +135,23 @@ export function useUpsertPrediction() {
         .maybeSingle();
 
       const isUpdate = !!existing?.id;
-      const now = new Date().toISOString();
 
-      const payload = {
-        cliente_id:    input.cliente_id,
-        fixture_id:    input.fixture_id,
-        pick_winner:   input.pick_winner,
-        score_home:    input.score_home,
-        score_away:    input.score_away,
-        submitted_at:  now,
-        updated_at:    now,
-      };
+      const { error } = await supabase.rpc('upsert_prediction_secure', {
+        p_user_id: input.user_id,
+        p_cliente_id: input.cliente_id,
+        p_fixture_id: input.fixture_id,
+        p_pick_winner: input.pick_winner,
+        p_score_home: input.score_home,
+        p_score_away: input.score_away,
+      });
 
-      if (isUpdate) {
-        const { error } = await supabase
-          .from('predictions')
-          .update(payload)
-          .eq('id', existing.id);
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await supabase
-          .from('predictions')
-          .insert({ ...payload, points_earned: 0, locked: false });
-        if (error) throw new Error(error.message);
-      }
+      if (error) throw new Error(parsePredictionError(error, 'No se pudo guardar el pronóstico'));
 
-      // Log de actividad (fire-and-forget)
       logActivity({
-        user_id:    input.user_id,
+        user_id: input.user_id,
         cliente_id: input.cliente_id,
-        action:     isUpdate ? 'UPDATE_PREDICTION' : 'CREATE_PREDICTION',
-        detail:     `fixture_id: ${input.fixture_id}, pick: ${input.pick_winner}`,
+        action: isUpdate ? 'UPDATE_PREDICTION' : 'CREATE_PREDICTION',
+        detail: `fixture_id: ${input.fixture_id}, pick: ${input.pick_winner}`,
       });
 
       return { isUpdate };
@@ -183,13 +176,12 @@ export function useDeletePrediction() {
 
   return useMutation({
     mutationFn: async (input: DeletePredictionInput) => {
-      const { error } = await supabase
-        .from('predictions')
-        .delete()
-        .eq('id', input.prediction_id)
-        .eq('cliente_id', input.cliente_id);
+      const { error } = await supabase.rpc('delete_prediction_secure', {
+        p_cliente_id: input.cliente_id,
+        p_prediction_id: input.prediction_id,
+      });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(parsePredictionError(error, 'No se pudo eliminar el pronóstico'));
 
       logActivity({
         user_id:    input.user_id,

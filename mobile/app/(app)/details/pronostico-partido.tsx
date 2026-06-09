@@ -22,7 +22,8 @@ import {
   usePredictionsRealtime,
   useUpsertPrediction,
 } from '../../../src/features/content/api/predictions';
-import { useMatch } from '../../../src/hooks/useApiFootball';
+import { ensureFixtureInDb } from '../../../src/features/content/api/matchResultsSync';
+import { useMatchMerged } from '../../../src/hooks/useMergedFixtures';
 import { useAuth } from '../../../src/providers/AuthProvider';
 import { useAppTheme } from '../../../src/providers/ThemeProvider';
 import { getFlagEmoji } from '../../../src/theme/theme';
@@ -76,7 +77,7 @@ export default function PronosticoPartidoScreen() {
   const params = useLocalSearchParams<{ fixtureId?: string }>();
   const fixtureId = params.fixtureId ? Number(params.fixtureId) : null;
 
-  const { data: match, isLoading: matchLoading } = useMatch(fixtureId);
+  const { data: match, isLoading: matchLoading } = useMatchMerged(fixtureId);
   const { data: predictions, refetch: refetchPredictions } = usePredictions(user?.cliente_id);
   usePredictionsRealtime();
   const upsert = useUpsertPrediction();
@@ -92,7 +93,7 @@ export default function PronosticoPartidoScreen() {
     return buildMatchDate(match.isoDate, match.time);
   }, [match]);
 
-  const locked = isPredictionLocked(matchDate);
+  const locked = isPredictionLocked(matchDate) || !!existing?.locked;
   const hasExisting = !!existing;
 
   const [isEditing, setIsEditing] = useState(!hasExisting);
@@ -120,6 +121,13 @@ export default function PronosticoPartidoScreen() {
       router.replace('/(app)/pronosticos');
     }
   }, [matchLoading, match, fixtureId, router]);
+
+  useEffect(() => {
+    if (!fixtureId || !user) return;
+    void ensureFixtureInDb(fixtureId).catch((e) => {
+      console.warn('[pronostico-partido] ensureFixtureInDb', e);
+    });
+  }, [fixtureId, user?.cliente_id]);
 
   const canEdit = !locked && (isEditing || !hasExisting);
   const canSave = canEdit && home !== '' && away !== '' && !saving && !deleting;

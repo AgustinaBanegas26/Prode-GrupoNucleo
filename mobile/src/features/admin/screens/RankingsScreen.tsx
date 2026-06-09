@@ -34,7 +34,7 @@ export function RankingsScreen() {
   const [query,  setQuery]  = useState('');
 
   const { user } = useAuth();
-  const { data: ranking = [] } = useRanking();
+  const { data: ranking = [] } = useRanking(period);
   const { data: scoring } = useScoringConfig();
   const updateScoring = useUpdateScoringConfig();
   useRankingRealtime();

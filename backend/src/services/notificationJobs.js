@@ -67,12 +67,16 @@ async function runTenMinuteReminders() {
 
     const { data: preds } = await supabase
       .from('predictions')
-      .select('cliente_id, home_goals, away_goals')
+      .select('cliente_id, score_home, score_away, home_goals, away_goals')
       .eq('fixture_id', m.fixture_id);
 
     const complete = new Set(
       (preds ?? [])
-        .filter((p) => p.home_goals != null && p.away_goals != null)
+        .filter((p) => {
+          const home = p.score_home ?? p.home_goals;
+          const away = p.score_away ?? p.away_goals;
+          return home != null && away != null;
+        })
         .map((p) => String(p.cliente_id)),
     );
 

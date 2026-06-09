@@ -46,8 +46,13 @@ function getEnv(name) {
 }
 
 function getSupabaseAdminClient() {
-  const url = getEnv('SUPABASE_URL');
-  const serviceKey = getEnv('SUPABASE_SERVICE_KEY');
+  const url = process.env.SUPABASE_URL;
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error('SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_SERVICE_KEY) son requeridos');
+  }
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -120,19 +125,60 @@ async function fetchFixturesPaged(params) {
   return { fixtures, pagingTotal };
 }
 
+function mapFootballDataStatus(status) {
+  switch (status) {
+    case 'TIMED':
+    case 'SCHEDULED':
+      return 'NS';
+    case 'IN_PLAY':
+      return '1H';
+    case 'PAUSED':
+      return 'HT';
+    case 'FINISHED':
+      return 'FT';
+    case 'POSTPONED':
+      return 'PST';
+    case 'CANCELLED':
+      return 'CANC';
+    default:
+      return 'NS';
+  }
+}
+
+function mapFootballDataPhase(stage) {
+  switch (stage) {
+    case 'GROUP_STAGE':
+      return 'Fase de Grupos';
+    case 'LAST_16':
+      return 'Octavos';
+    case 'QUARTER_FINALS':
+      return 'Cuartos';
+    case 'SEMI_FINALS':
+      return 'Semifinales';
+    case 'FINAL':
+      return 'Final';
+    default:
+      return stage ?? null;
+  }
+}
+
 function toFootballDataRow(match) {
   const score = match?.score?.fullTime ?? {};
+  const finished = match?.status === 'FINISHED';
+  const live = match?.status === 'IN_PLAY' || match?.status === 'PAUSED';
+  const hasScore = finished || live;
+
   return {
     fixture_id: match.id,
     home_team: match.homeTeam?.name ?? '',
     away_team: match.awayTeam?.name ?? '',
     home_logo: match.homeTeam?.crest ?? null,
     away_logo: match.awayTeam?.crest ?? null,
-    home_goals: typeof score.home === 'number' ? score.home : null,
-    away_goals: typeof score.away === 'number' ? score.away : null,
-    status: 'FT',
+    home_goals: hasScore && typeof score.home === 'number' ? score.home : null,
+    away_goals: hasScore && typeof score.away === 'number' ? score.away : null,
+    status: mapFootballDataStatus(match?.status ?? 'SCHEDULED'),
     match_date: match.utcDate,
-    round: match.stage ?? null,
+    round: mapFootballDataPhase(match?.stage),
     venue: match.venue ?? null,
     updated_at: nowIso(),
   };
@@ -143,6 +189,50 @@ function toFootballDataRow(match) {
  * - Misma fuente que la app móvil (football-data.org)
  * - IDs compatibles con predictions.fixture_id
  */
+/**
+ * syncFootballDataAll():
+ * - Misma fuente e IDs que la app móvil (football-data.org)
+ * - Pobla matches con TODOS los partidos (programados + en juego + finalizados)
+ * - Necesario para que el bloqueo de 10 min y las predicciones funcionen en partidos reales
+ */
+async function syncFootballDataAll() {
+  const token = process.env.FOOTBALL_DATA_TOKEN || process.env.EXPO_PUBLIC_FOOTBALL_DATA_TOKEN;
+  if (!token) {
+    log('FOOTBALL_DATA_TOKEN no configurado — omitiendo sync football-data (all)');
+    return { updated: 0 };
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  try {
+    const res = await withRetry(() =>
+      axios.get(`${FOOTBALL_DATA_BASE}/competitions/${WC_CODE}/matches`, {
+        headers: { 'X-Auth-Token': token },
+        timeout: 15000,
+      }),
+    );
+
+    const matches = Array.isArray(res?.data?.matches) ? res.data.matches : [];
+    const rows = matches
+      .map(toFootballDataRow)
+      .filter((r) => r.fixture_id && r.home_team?.trim() && r.away_team?.trim() && r.match_date);
+
+    if (rows.length === 0) {
+      log('0 partidos football-data (all) sincronizados');
+      return { updated: 0 };
+    }
+
+    const { error } = await supabase.from('matches').upsert(rows, { onConflict: 'fixture_id' });
+    if (error) throw new Error(`Supabase upsert error: ${error.message}`);
+
+    log(`${rows.length} partidos football-data (all) sincronizados`);
+    return { updated: rows.length };
+  } catch (e) {
+    logError('Error en syncFootballDataAll', e);
+    throw e;
+  }
+}
+
 async function syncFootballDataFinished() {
   const token = process.env.FOOTBALL_DATA_TOKEN || process.env.EXPO_PUBLIC_FOOTBALL_DATA_TOKEN;
   if (!token) {
@@ -324,10 +414,10 @@ async function syncAllMatches() {
  */
 function startSyncCron() {
   try {
-    // Valida env al iniciar (falla temprano)
-    getEnv('API_FOOTBALL_KEY');
-    getEnv('SUPABASE_URL');
-    getEnv('SUPABASE_SERVICE_KEY');
+    getSupabaseAdminClient();
+
+    // Sync completo al arrancar (football-data.org = misma API que la app)
+    void syncFootballDataAll().catch(() => {});
 
     cron.schedule(
       '*/2 * * * *',
@@ -338,7 +428,21 @@ function startSyncCron() {
           // error ya logueado en sync
         }
         try {
-          await syncFinishedMatches();
+          if (process.env.API_FOOTBALL_KEY) {
+            await syncFinishedMatches();
+          }
+        } catch (_) {
+          // error ya logueado en sync
+        }
+      },
+      { timezone: 'UTC' },
+    );
+
+    cron.schedule(
+      '0 */6 * * *',
+      async () => {
+        try {
+          await syncFootballDataAll();
         } catch (_) {
           // error ya logueado en sync
         }
@@ -350,7 +454,9 @@ function startSyncCron() {
       '0 6 * * *',
       async () => {
         try {
-          await syncAllMatches();
+          if (process.env.API_FOOTBALL_KEY) {
+            await syncAllMatches();
+          }
         } catch (_) {
           // error ya logueado en sync
         }
@@ -358,7 +464,7 @@ function startSyncCron() {
       { timezone: 'UTC' },
     );
 
-    log('Cron iniciado (*/2 min + 06:00 UTC)');
+    log('Cron iniciado (football-data all cada 6h + finished cada 2min)');
   } catch (e) {
     logError('No se pudo iniciar el cron', e);
     throw e;
@@ -367,6 +473,7 @@ function startSyncCron() {
 
 module.exports = {
   startSyncCron,
+  syncFootballDataAll,
   syncFootballDataFinished,
   syncFinishedMatches,
   syncTodayMatches,

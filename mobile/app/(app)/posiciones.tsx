@@ -1,6 +1,5 @@
 /**
- * Posiciones — ranking calculado desde tabla predictions de Supabase
- * La API solo sirve para partidos. Los puntos se calculan localmente.
+ * Posiciones — ranking en tiempo real desde tabla ranking de Supabase.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -70,15 +69,19 @@ function useRankingFromSupabase() {
 
       const entries: RankingEntry[] = (rows ?? []).map((r, i) => {
         const clienteId = String(r.cliente_id);
+        const points = Number(r.total_points);
+        const played = Number(r.total_played);
+        const exact  = Number(r.correct_exact);
+        const pos    = Number(r.position);
         return {
           id:        String(r.id ?? r.cliente_id),
           clienteId,
-          position:  r.position ?? i + 1,
+          position:  Number.isFinite(pos) && pos > 0 ? pos : i + 1,
           name:      r.nombre ?? `Cliente ${r.cliente_id}`,
           avatarUrl: avatars[clienteId] ?? null,
-          points:    r.total_points   ?? 0,
-          played:    r.total_played   ?? 0,
-          diff:      r.correct_exact  ?? 0,
+          points:    Number.isFinite(points) ? points : 0,
+          played:    Number.isFinite(played) ? played : 0,
+          diff:      Number.isFinite(exact) ? exact : 0,
           isCurrent: clienteId === String(user?.cliente_id),
         };
       });

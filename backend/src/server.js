@@ -349,6 +349,87 @@ app.put('/admin/app/version/:id', requireAdmin, async (req, res) => {
 });
 
 /**
+ * POST /predictions
+ * Guarda/actualiza pronóstico con validación de bloqueo en Supabase.
+ */
+app.post('/predictions', async (req, res) => {
+  try {
+    const { user_id, cliente_id, fixture_id, pick_winner, score_home, score_away } = req.body ?? {};
+    if (!cliente_id || fixture_id == null || !pick_winner) {
+      return sendError(res, 400, 'cliente_id, fixture_id y pick_winner son requeridos');
+    }
+    if (score_home == null || score_away == null) {
+      return sendError(res, 400, 'score_home y score_away son requeridos');
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.rpc('upsert_prediction_secure', {
+      p_user_id: String(user_id ?? cliente_id),
+      p_cliente_id: String(cliente_id),
+      p_fixture_id: Number(fixture_id),
+      p_pick_winner: pick_winner,
+      p_score_home: Number(score_home),
+      p_score_away: Number(score_away),
+    });
+
+    if (error) {
+      const msg = error.message ?? 'Error al guardar pronóstico';
+      const status = msg.includes('PREDICTION_LOCKED') ? 403 : 400;
+      return sendError(res, status, msg.replace('PREDICTION_LOCKED: ', ''));
+    }
+
+    return res.status(201).json({ success: true, id: data });
+  } catch (err) {
+    logError('POST /predictions', err);
+    return sendError(res, 500, err.message);
+  }
+});
+
+/**
+ * DELETE /predictions/:id
+ * Body: { cliente_id }
+ */
+app.delete('/predictions/:id', async (req, res) => {
+  try {
+    const { cliente_id } = req.body ?? {};
+    if (!cliente_id) return sendError(res, 400, 'cliente_id es requerido');
+
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.rpc('delete_prediction_secure', {
+      p_cliente_id: String(cliente_id),
+      p_prediction_id: req.params.id,
+    });
+
+    if (error) {
+      const msg = error.message ?? 'Error al eliminar pronóstico';
+      const status = msg.includes('PREDICTION_LOCKED') ? 403 : 400;
+      return sendError(res, status, msg.replace('PREDICTION_LOCKED: ', ''));
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    logError('DELETE /predictions/:id', err);
+    return sendError(res, 500, err.message);
+  }
+});
+
+/**
+ * POST /admin/seed-test-match
+ * Crea/actualiza partido de prueba Argentina vs Brasil (+15 min).
+ */
+app.post('/admin/seed-test-match', requireAdmin, async (_req, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.rpc('seed_test_match');
+    if (error) throw new Error(error.message);
+    return res.json({ success: true, fixture_id: data });
+  } catch (err) {
+    logError('POST /admin/seed-test-match', err);
+    return sendError(res, 500, err.message);
+  }
+});
+
+/**
  * DELETE /admin/reset-stats
  * Resetea estadísticas: scores, ranking_cache, predictions, notifications, resultados de partidos.
  * NO toca usuarios, credenciales, scoring_config, slider, APK versions.

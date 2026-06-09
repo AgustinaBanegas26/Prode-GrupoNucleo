@@ -9,7 +9,10 @@
     "start:server": "node src/server.js",
     "sync:fixture": "node -e \"const {syncAllMatches}=require('./src/services/matchSync'); syncAllMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\"",
     "sync:finished": "node -e \"const {syncFinishedMatches}=require('./src/services/matchSync'); syncFinishedMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\"",
-    "sync:all": "node -e \"const {syncAllMatches}=require('./src/services/matchSync'); syncAllMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\""
+    "sync:all": "node -e \"const {syncAllMatches}=require('./src/services/matchSync'); syncAllMatches().then(()=>process.exit(0)).catch(e=>{console.error(e); process.exit(1)})\"",
+    "sync:fixtures": "node -e \"require('./scripts/loadEnv').loadEnv(); const {syncFootballDataAll}=require('./src/services/matchSync'); syncFootballDataAll().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "seed:test-match": "node scripts/seed-test-match.js",
+    "test:e2e": "node scripts/e2e-test-flow.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",

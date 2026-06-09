@@ -17,7 +17,8 @@ import {
 } from 'react-native';
 
 import { Screen } from '../../src/components/Screen';
-import { useAllFixtures } from '../../src/hooks/useApiFootball';
+import { useAllFixturesWithDb } from '../../src/hooks/useMergedFixtures';
+import { useMatchesRealtime } from '../../src/features/content/api/matches';
 import { usePredictions, usePredictionsRealtime } from '../../src/features/content/api/predictions';
 import type { NormalizedMatch } from '../../src/services/apiFootball.types';
 import { FOOTBALL_DATA_ERROR_MSG } from '../../src/services/footballData';
@@ -200,9 +201,10 @@ export default function PronosticosScreen() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('PENDIENTES');
 
-  const { data: apiMatches, isLoading: fixturesLoading, isError: fixturesError, refetch: refetchFixtures } = useAllFixtures();
+  const { data: apiMatches, isLoading: fixturesLoading, isError: fixturesError, refetch: refetchFixtures } = useAllFixturesWithDb();
   const { data: predictions } = usePredictions(user?.cliente_id);
   usePredictionsRealtime();
+  useMatchesRealtime();
 
   const savedMap = useMemo(() => {
     const m: Record<number, { home: string; away: string }> = {};
@@ -213,6 +215,14 @@ export default function PronosticosScreen() {
       };
     }
     return m;
+  }, [predictions]);
+
+  const lockedFixtures = useMemo(() => {
+    const ids = new Set<number>();
+    for (const p of predictions ?? []) {
+      if (p.locked) ids.add(p.fixture_id);
+    }
+    return ids;
   }, [predictions]);
 
   const allMatches: MatchEntry[] = useMemo(() => {
@@ -331,7 +341,7 @@ export default function PronosticosScreen() {
               match={item}
               savedHome={savedMap[item.fixtureId]?.home}
               savedAway={savedMap[item.fixtureId]?.away}
-              isLocked={isPredictionLocked(item.matchDate)}
+              isLocked={isPredictionLocked(item.matchDate) || lockedFixtures.has(item.fixtureId)}
               onPress={() => openMatch(item.fixtureId)}
             />
           )}

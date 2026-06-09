@@ -60,6 +60,8 @@ export function MatchesManagementScreen() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [isEdit, setIsEdit] = useState(false);
   const [query, setQuery] = useState('');
+  const [seeding, setSeeding] = useState(false);
+  const [seedingPreds, setSeedingPreds] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -125,6 +127,46 @@ export function MatchesManagementScreen() {
     }
   };
 
+  const handleSeedTestMatch = async () => {
+    setSeeding(true);
+    try {
+      const { data, error } = await supabase.rpc('seed_test_match');
+      if (error) throw new Error(error.message);
+      await refetch();
+      const kickoff = new Date(Date.now() + 15 * 60 * 1000).toLocaleString('es-AR', {
+        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+      });
+      Alert.alert(
+        'Partido de prueba listo',
+        `Argentina vs Brasil (#${data ?? 999001})\nInicio: ${kickoff}\nBloqueo: 10 min antes.`,
+      );
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo crear el partido de prueba');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const handleSeedTestPredictions = async () => {
+    setSeedingPreds(true);
+    try {
+      const { data: fixtureId } = await supabase.rpc('seed_test_match');
+      const fid = fixtureId ?? 999001;
+      const { data, error } = await supabase.rpc('seed_test_predictions', { p_fixture_id: fid });
+      if (error) throw new Error(error.message);
+      await refetch();
+      const count = (data as { count?: number })?.count ?? 0;
+      Alert.alert(
+        'Predicciones de prueba',
+        `Se crearon ${count} pronósticos de usuarios reales para el partido #${fid}.`,
+      );
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudieron simular predicciones');
+    } finally {
+      setSeedingPreds(false);
+    }
+  };
+
   const confirmDelete = (m: MatchRow) => {
     Alert.alert(
       'Eliminar partido',
@@ -176,6 +218,28 @@ export function MatchesManagementScreen() {
           </Pressable>
         </View>
       </LinearGradient>
+
+      <Pressable
+        onPress={handleSeedTestMatch}
+        disabled={seeding}
+        style={[s.seedBtn, { backgroundColor: isDark ? 'rgba(110,198,255,0.12)' : CELESTE + '22', borderColor: CELESTE_DARK, marginHorizontal: 16, marginBottom: 8 }]}
+      >
+        <MaterialCommunityIcons name="soccer" size={18} color={CELESTE_DARK} />
+        <Text style={[s.seedBtnText, { color: CELESTE_DARK }]}>
+          {seeding ? 'Creando partido de prueba…' : 'Crear partido de prueba (ARG vs BRA, +15 min)'}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={handleSeedTestPredictions}
+        disabled={seedingPreds}
+        style={[s.seedBtn, { backgroundColor: isDark ? 'rgba(34,197,94,0.10)' : '#22C55E18', borderColor: '#22C55E', marginHorizontal: 16, marginBottom: 8 }]}
+      >
+        <MaterialCommunityIcons name="account-multiple-check" size={18} color="#22C55E" />
+        <Text style={[s.seedBtnText, { color: '#22C55E' }]}>
+          {seedingPreds ? 'Simulando usuarios…' : 'Simular predicciones (usuarios reales de DB)'}
+        </Text>
+      </Pressable>
 
       <View style={[s.searchBox, { backgroundColor: cardBg, borderColor: cardBorder, margin: 16, marginBottom: 8 }]}>
         <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.muted} />
@@ -392,6 +456,8 @@ const s = StyleSheet.create({
   addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   title: { color: '#fff', fontSize: 20, fontWeight: '800' },
   sub: { color: 'rgba(255,255,255,0.68)', fontSize: 12, fontWeight: '500', marginTop: 2 },
+  seedBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  seedBtnText: { fontSize: 13, fontWeight: '700', flex: 1 },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, height: 46 },
   searchInput: { flex: 1, fontSize: 14 },
   card: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 8 },

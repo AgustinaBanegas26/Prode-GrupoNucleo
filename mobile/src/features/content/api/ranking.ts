@@ -49,13 +49,18 @@ export function useRanking(period: RankingPeriod = 'general') {
           .select('*')
           .order('total_points', { ascending: false });
         if (error) throw new Error(error.message);
-        return ((data ?? []) as RankingRow[]).map((r, i) => ({
-          id: r.cliente_id,
-          userName: r.nombre ?? `Cliente ${r.cliente_id}`,
-          points: r.total_points ?? 0,
-          played: r.total_played ?? 0,
-          position: r.position ?? i + 1,
-        }));
+        return ((data ?? []) as RankingRow[]).map((r, i) => {
+          const points = Number(r.total_points);
+          const played = Number(r.total_played);
+          const pos = Number(r.position);
+          return {
+            id: r.cliente_id,
+            userName: r.nombre ?? `Cliente ${r.cliente_id}`,
+            points: Number.isFinite(points) ? points : 0,
+            played: Number.isFinite(played) ? played : 0,
+            position: Number.isFinite(pos) && pos > 0 ? pos : i + 1,
+          };
+        });
       }
       // semanal / mensual — use ranking_cache scopes
       const scope = period === 'semanal' ? 'semanal' : 'mensual';
