@@ -170,3 +170,38 @@ export function useUpsertPrediction() {
     },
   });
 }
+
+export type DeletePredictionInput = {
+  user_id: string;
+  cliente_id: string;
+  prediction_id: string;
+  fixture_id: number;
+};
+
+export function useDeletePrediction() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: DeletePredictionInput) => {
+      const { error } = await supabase
+        .from('predictions')
+        .delete()
+        .eq('id', input.prediction_id)
+        .eq('cliente_id', input.cliente_id);
+
+      if (error) throw new Error(error.message);
+
+      logActivity({
+        user_id:    input.user_id,
+        cliente_id: input.cliente_id,
+        action:     'DELETE_PREDICTION',
+        detail:     `fixture_id: ${input.fixture_id}`,
+      });
+    },
+    onSuccess: async (_data, variables) => {
+      await qc.invalidateQueries({ queryKey: predictionsQueryKey(variables.cliente_id) });
+      await qc.invalidateQueries({ queryKey: allPredictionsQueryKey });
+      await qc.refetchQueries({ queryKey: predictionsQueryKey(variables.cliente_id), type: 'active' });
+    },
+  });
+}

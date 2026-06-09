@@ -1,244 +1,173 @@
+import bcrypt from 'bcryptjs';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
+  StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
+import { AuthScreenShell } from '../../src/components/auth/AuthScreenShell';
+import { FormTextField } from '../../src/components/FormTextField';
 import { PasswordStrengthBar } from '../../src/components/PasswordStrengthBar';
+import {
+  type ForceChangePasswordFormValues,
+  forceChangePasswordSchema,
+} from '../../src/features/auth/schemas';
+import { supabase } from '../../src/lib/supabase';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useAppTheme } from '../../src/providers/ThemeProvider';
+
+const CELESTE_DARK = '#3DA5F5';
+const DEEP_BLUE = '#0F4C81';
+
+async function validateCurrentPassword(
+  userId: string,
+  role: 'client' | 'admin',
+  currentPassword: string,
+): Promise<boolean> {
+  if (role === 'admin') {
+    const { data } = await supabase
+      .from('admins')
+      .select('password_hash, primer_login')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data?.primer_login) return currentPassword === 'admingn123!';
+    return bcrypt.compare(currentPassword, data?.password_hash || '');
+  }
+
+  const { data } = await supabase
+    .from('clientes')
+    .select('password_hash, primer_login')
+    .eq('id', userId)
+    .maybeSingle();
+  if (data?.primer_login) return currentPassword === 'clientesgn123';
+  return bcrypt.compare(currentPassword, data?.password_hash || '');
+}
 
 export default function ForceChangePasswordScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { user, changePassword } = useAuth();
 
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);  // Bloquear botón atrás en Android
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => sub.remove();
   }, []);
 
-  const logoSource = useMemo(
-    () =>
-      theme.isDark
-        ? require('../../images/icononucleo.png')
-        : require('../../images/icononucleo-light.png'),
-    [theme.isDark],
-  );
+  const { control, handleSubmit, formState, watch } = useForm<ForceChangePasswordFormValues>({
+    resolver: zodResolver(forceChangePasswordSchema),
+    defaultValues: { currentPassword: '', password: '', confirmPassword: '' },
+  });
 
-  const validate = (): string | null => {
-    if (password.length < 8) return 'Mínimo 8 caracteres';
-    if (!/[A-Z]/.test(password)) return 'Debe incluir al menos una mayúscula';
-    if (!/[a-z]/.test(password)) return 'Debe incluir al menos una minúscula';
-    if (!/\d/.test(password)) return 'Debe incluir al menos un número';
-    if (!/[^A-Za-z0-9]/.test(password)) return 'Debe incluir al menos un símbolo';
-    if (password !== confirm) return 'Las contraseñas no coinciden';
-    return null;
-  };
+  const newPassword = watch('password');
 
-  const handleSubmit = async () => {
-    const validationError = validate();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
+  const onSubmit = handleSubmit(async (values) => {
     if (!user) {
-      setError('Sesión no encontrada. Volvé a iniciar sesión.');
+      setSubmitError('Sesión no encontrada. Volvé a iniciar sesión.');
       return;
     }
 
-    setError(null);
-    setLoading(true);
+    setSubmitError(null);
+
+    const currentOk = await validateCurrentPassword(user.id, user.role, values.currentPassword);
+    if (!currentOk) {
+      setSubmitError('La contraseña actual no es correcta.');
+      return;
+    }
 
     try {
-      console.log('[FCP] llamando changePassword para user:', user.id, 'role:', user.role);
-      await changePassword(user, password);
-      console.log('[FCP] changePassword exitoso, redirigiendo...');
+      await changePassword(user, values.password);
       router.replace(user.role === 'admin' ? '/(admin)' : '/(app)');
     } catch (e) {
-      console.log('[FCP] error:', e);
-      setError(e instanceof Error ? e.message : 'Error al actualizar la contraseña.');
-    } finally {
-      setLoading(false);
+      setSubmitError(e instanceof Error ? e.message : 'Error al actualizar la contraseña.');
     }
-  };
+  });
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <AuthScreenShell
+      title="Cambiar Contraseña"
+      subtitle={
+        user
+          ? `Hola ${user.nombre}. Definí tu contraseña definitiva para continuar.`
+          : 'Definí tu contraseña definitiva para continuar.'
+      }
+    >
+      <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Nueva contraseña</Text>
+
+      <FormTextField
+        control={control}
+        name="currentPassword"
+        label="Contraseña actual"
+        placeholder="Tu contraseña actual o temporal"
+        secureTextEntry
+      />
+
+      <FormTextField
+        control={control}
+        name="password"
+        label="Nueva contraseña"
+        placeholder="Mín. 8, mayús, minús, número, símbolo"
+        secureTextEntry
+      />
+
+      <PasswordStrengthBar password={newPassword} />
+
+      <FormTextField
+        control={control}
+        name="confirmPassword"
+        label="Confirmar contraseña"
+        placeholder="Repetí la nueva contraseña"
+        secureTextEntry
+      />
+
+      {submitError ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{submitError}</Text>
+        </View>
+      ) : null}
+
+      <Pressable
+        onPress={onSubmit}
+        disabled={formState.isSubmitting}
+        style={({ pressed }) => [styles.btnWrap, { opacity: pressed || formState.isSubmitting ? 0.8 : 1 }]}
       >
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <LinearGradient
+          colors={[CELESTE_DARK, DEEP_BLUE]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.btnGrad}
         >
-          {/* Logo + título */}
-          <View style={{ alignItems: 'center', marginBottom: 32 }}>
-            <Image
-              source={logoSource}
-              style={{ width: 140, height: 140, marginBottom: 20 }}
-              resizeMode="contain"
-            />
-            <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 }}>
-              Cambiá tu contraseña
-            </Text>
-            <Text style={{ color: theme.colors.muted, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-              {user ? `Hola ${user.nombre}. Definí tu contraseña definitiva.` : 'Definí tu contraseña definitiva.'}
-            </Text>
-          </View>
-
-          {/* Formulario */}
-          <View
-            style={{
-              backgroundColor: theme.colors.surface,
-              borderRadius: 20,
-              padding: 24,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              gap: 16,
-            }}
-          >
-            {/* Campo contraseña nueva */}
-            <View style={{ gap: 6 }}>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
-                Contraseña nueva
-              </Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  height: 50,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                  paddingHorizontal: 14,
-                }}
-              >
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Mín. 8, mayús, minús, número, símbolo"
-                  placeholderTextColor={theme.colors.placeholder}
-                  secureTextEntry={!showPass}
-                  autoCapitalize="none"
-                  style={{
-                    flex: 1,
-                    color: theme.colors.text,
-                    fontSize: 15,
-                    paddingVertical: 0,
-                    outlineStyle: 'none' as any,
-                  }}
-                />
-                <Pressable onPress={() => setShowPass(v => !v)} hitSlop={12}>
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Indicador de fortaleza */}
-            <PasswordStrengthBar password={password} />
-
-            {/* Campo confirmar */}
-            <View style={{ gap: 6 }}>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
-                Confirmar contraseña
-              </Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  height: 50,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                  paddingHorizontal: 14,
-                }}
-              >
-                <TextInput
-                  value={confirm}
-                  onChangeText={setConfirm}
-                  placeholder="Repetí la contraseña"
-                  placeholderTextColor={theme.colors.placeholder}
-                  secureTextEntry={!showConfirm}
-                  autoCapitalize="none"
-                  style={{
-                    flex: 1,
-                    color: theme.colors.text,
-                    fontSize: 15,
-                    paddingVertical: 0,
-                    outlineStyle: 'none' as any,
-                  }}
-                />
-                <Pressable onPress={() => setShowConfirm(v => !v)} hitSlop={12}>
-                  <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.muted} />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Error */}
-            {error ? (
-              <View
-                style={{
-                  backgroundColor: 'rgba(61,165,245,0.08)',
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: 'rgba(61,165,245,0.25)',
-                  padding: 12,
-                }}
-              >
-                <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '600' }}>
-                  {error}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* Botón */}
-            <Pressable
-              onPress={handleSubmit}
-              disabled={loading}
-              style={{
-                height: 50,
-                borderRadius: 12,
-                backgroundColor: theme.colors.primary,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: loading ? 0.7 : 1,
-                marginTop: 4,
-              }}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-                  Actualizar contraseña
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          {formState.isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.btnText}>Actualizar contraseña</Text>
+          )}
+        </LinearGradient>
+      </Pressable>
+    </AuthScreenShell>
   );
 }
+
+const styles = StyleSheet.create({
+  cardTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
+  errorBox: {
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+    padding: 12,
+  },
+  errorText: { color: '#ef4444', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  btnWrap: { borderRadius: 14, overflow: 'hidden', marginTop: 4 },
+  btnGrad: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+});

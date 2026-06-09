@@ -24,6 +24,7 @@ const {
   listVersions,
 } = require('./services/appVersionService');
 const { loginAdmin } = require('./services/adminAuthService');
+const { requestPasswordRecovery } = require('./services/passwordRecoveryService');
 const { getSupabaseAdmin } = require('./services/supabaseAdmin');
 const { processOutboxBatch } = require('./services/pushService');
 const { notifyNewAppVersion } = require('./services/notificationJobs');
@@ -131,6 +132,39 @@ app.get('/app/version', async (_req, res) => {
       forceUpdate: false,
       changelog: '',
     });
+  }
+});
+
+/**
+ * POST /auth/password-recovery
+ * Body: { email, redirectTo? }
+ * Verifica email legacy, sincroniza auth.users y envía correo de recuperación.
+ */
+app.post('/auth/password-recovery', async (req, res) => {
+  try {
+    const { email, redirectTo } = req.body ?? {};
+    if (!email?.trim()) {
+      return sendError(res, 400, 'Ingresá un email válido.');
+    }
+
+    const recoveryRedirect =
+      redirectTo?.trim() || process.env.PASSWORD_RESET_REDIRECT_URL || 'prode-grupo-nucleo://reset-password';
+
+    await requestPasswordRecovery(String(email), recoveryRedirect);
+    return res.json({ ok: true, message: 'Correo enviado correctamente.' });
+  } catch (err) {
+    logError('POST /auth/password-recovery', err);
+    const code = err.code ?? 'unknown';
+    if (code === 'email_not_found') {
+      return sendError(res, 404, 'El correo no existe.');
+    }
+    if (code === 'invalid_email') {
+      return sendError(res, 400, err.message);
+    }
+    if (code === 'send_failed') {
+      return sendError(res, 502, 'No fue posible enviar el correo. Intente nuevamente.');
+    }
+    return sendError(res, 500, 'No fue posible enviar el correo. Intente nuevamente.');
   }
 });
 

@@ -20,6 +20,14 @@ import {
   Text,
   View,
 } from "react-native";
+import Reanimated, {
+  cancelAnimation,
+  Easing as ReanimatedEasing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -191,53 +199,92 @@ function WCBanner() {
           offset: (itemWidth + 12) * index,
           index,
         })}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => handlePress(item)}
-            style={[bannerS.bannerItem, { width: itemWidth, marginRight: 12 }]}
-          >
-            <View style={bannerS.gradient}>
-              <Image
-                key={item.imageUrl}
-                source={{ uri: item.imageUrl }}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              />
-              <LinearGradient
-                colors={["rgba(0,0,0,0.3)", "rgba(15,76,129,0.85)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
+        renderItem={({ item }) => {
+          const showTextOverlay = item.showTitle !== false;
 
-              {/* Decoración geométrica */}
-              <View style={[bannerS.circle, { borderColor: CELESTE + "30" }]} />
+          return (
+            <Pressable
+              onPress={() => handlePress(item)}
+              style={[bannerS.bannerItem, { width: itemWidth, marginRight: 12 }]}
+            >
               <View
-                style={[bannerS.circleSmall, { borderColor: CELESTE + "20" }]}
-              />
+                style={[
+                  bannerS.gradient,
+                  !showTextOverlay && bannerS.imageOnly,
+                ]}
+              >
+                <Image
+                  key={item.imageUrl}
+                  source={{ uri: item.imageUrl }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
 
-              <View style={bannerS.row}>
-                <View style={bannerS.textBlock}>
-                  <Text style={bannerS.title}>{item.title}</Text>
-                  {item.description ? (
-                    <Text style={bannerS.subtitle}>{item.description}</Text>
-                  ) : null}
-                </View>
-                {item.button?.enabled ? (
-                  <View
-                    style={[bannerS.arrow, { backgroundColor: CELESTE + "25" }]}
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color={CELESTE}
+                {showTextOverlay ? (
+                  <>
+                    <LinearGradient
+                      colors={["rgba(0,0,0,0.3)", "rgba(15,76,129,0.85)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0, y: 1 }}
+                      style={StyleSheet.absoluteFill}
                     />
+                    <View
+                      style={[bannerS.circle, { borderColor: CELESTE + "30" }]}
+                    />
+                    <View
+                      style={[
+                        bannerS.circleSmall,
+                        { borderColor: CELESTE + "20" },
+                      ]}
+                    />
+                    <View style={bannerS.row}>
+                      <View style={bannerS.textBlock}>
+                        {item.title ? (
+                          <Text style={bannerS.title}>{item.title}</Text>
+                        ) : null}
+                        {item.description ? (
+                          <Text style={bannerS.subtitle}>
+                            {item.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {item.button?.enabled ? (
+                        <View
+                          style={[
+                            bannerS.arrow,
+                            { backgroundColor: CELESTE + "25" },
+                          ]}
+                        >
+                          <Ionicons
+                            name="chevron-forward"
+                            size={20}
+                            color={CELESTE}
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  </>
+                ) : item.button?.enabled ? (
+                  <View style={bannerS.row}>
+                    <View style={bannerS.textBlock} />
+                    <View
+                      style={[
+                        bannerS.arrow,
+                        { backgroundColor: CELESTE + "25" },
+                      ]}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={20}
+                        color={CELESTE}
+                      />
+                    </View>
                   </View>
                 ) : null}
               </View>
-            </View>
-          </Pressable>
-        )}
+            </Pressable>
+          );
+        }}
       />
       <View style={bannerS.dots}>
         {slides.map((b, i) => (
@@ -281,6 +328,10 @@ const bannerS = StyleSheet.create({
     padding: 22,
     justifyContent: "flex-end",
     position: "relative",
+  },
+  imageOnly: {
+    padding: 0,
+    justifyContent: "center",
   },
   circle: {
     position: "absolute",
@@ -528,8 +579,8 @@ const upS = StyleSheet.create({
   stadium: { fontSize: 11, fontWeight: "400" },
 });
 
-// ── Sponsors slider continuo ──────────────────────────────────
-const SPONSORS = [
+// ── Sponsors slider marquee infinito ───────────────────────────
+const BASE_SPONSORS = [
   {
     id: "s1",
     source: require("../../images/ezviz-seeklogo.png"),
@@ -538,45 +589,38 @@ const SPONSORS = [
   { id: "s2", source: require("../../images/KANY.png"), name: "KANY" },
   { id: "s3", source: require("../../images/PANTUM_ROJO.png"), name: "PANTUM" },
   { id: "s4", source: require("../../images/PCBOX.png"), name: "PCBOX" },
-  // duplicados para loop infinito visual
-  {
-    id: "s5",
-    source: require("../../images/ezviz-seeklogo.png"),
-    name: "EZVIZ2",
-  },
-  { id: "s6", source: require("../../images/KANY.png"), name: "KANY2" },
-  {
-    id: "s7",
-    source: require("../../images/PANTUM_ROJO.png"),
-    name: "PANTUM2",
-  },
-  { id: "s8", source: require("../../images/PCBOX.png"), name: "PCBOX2" },
-];
+] as const;
 
 const LOGO_W = 100;
 const LOGO_H = 52;
 const LOGO_GAP = 20;
-const LOOP_W = (LOGO_W + LOGO_GAP) * 4; // ancho de un ciclo (4 logos reales)
+const MARQUEE_SET_W =
+  BASE_SPONSORS.length * LOGO_W + (BASE_SPONSORS.length - 1) * LOGO_GAP;
+const MARQUEE_ITEMS = [...BASE_SPONSORS, ...BASE_SPONSORS];
+const MARQUEE_DURATION_MS = 14000;
 
 function SponsorsSlider({ theme }: { theme: any }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const anim = useRef<Animated.CompositeAnimation | null>(null);
+  const offset = useSharedValue(0);
 
   useEffect(() => {
-    const run = () => {
-      translateX.setValue(0);
-      anim.current = Animated.loop(
-        Animated.timing(translateX, {
-          toValue: -LOOP_W,
-          duration: 9000,
-          useNativeDriver: true,
-        }),
-      );
-      anim.current.start();
+    offset.value = 0;
+    offset.value = withRepeat(
+      withTiming(-MARQUEE_SET_W, {
+        duration: MARQUEE_DURATION_MS,
+        easing: ReanimatedEasing.linear,
+      }),
+      -1,
+      false,
+    );
+
+    return () => {
+      cancelAnimation(offset);
     };
-    run();
-    return () => anim.current?.stop();
-  }, []);
+  }, [offset]);
+
+  const marqueeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offset.value }],
+  }));
 
   return (
     <View style={spS.wrapper}>
@@ -584,10 +628,10 @@ function SponsorsSlider({ theme }: { theme: any }) {
         Sponsors oficiales
       </Text>
       <View style={spS.track}>
-        <Animated.View style={[spS.row, { transform: [{ translateX }] }]}>
-          {SPONSORS.map((s) => (
+        <Reanimated.View style={[spS.row, marqueeStyle]}>
+          {MARQUEE_ITEMS.map((s, index) => (
             <View
-              key={s.id}
+              key={`${s.id}-${index}`}
               style={[
                 spS.logoBox,
                 {
@@ -603,7 +647,7 @@ function SponsorsSlider({ theme }: { theme: any }) {
               <Image source={s.source} style={spS.logo} resizeMode="contain" />
             </View>
           ))}
-        </Animated.View>
+        </Reanimated.View>
       </View>
     </View>
   );
@@ -797,7 +841,12 @@ export default function AppHomeScreen() {
                 <UpcomingMatchCard
                   key={m.id}
                   match={m}
-                  onPress={() => router.push("/(app)/pronosticos")}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(app)/details/pronostico-partido",
+                      params: { fixtureId: String(m.id) },
+                    })
+                  }
                 />
               ))
             )}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../../../lib/supabase';
 import { deleteStorageObject, getPublicUrl, guessFileExt, uploadImageFromUri } from '../../../lib/storage';
+import { parseSliderDescription, serializeSliderDescription } from '../../../utils/sliderMeta';
 
 export type SliderSlideRow = {
   id: string;
@@ -24,6 +25,7 @@ export type SliderSlide = {
   id: string;
   title: string;
   description: string;
+  showTitle: boolean;
   /** Valor crudo de image_path en DB (URL pública o path relativo). */
   storedImagePath: string;
   imagePath: string;
@@ -44,6 +46,7 @@ export type UpsertSliderSlideInput = {
   id?: string;
   title: string;
   description: string;
+  showTitle?: boolean;
   active: boolean;
   order: number;
   button: {
@@ -134,10 +137,12 @@ export function parseSupabaseError(error: unknown, fallback: string): string {
 
 function mapRow(row: SliderSlideRow): SliderSlide {
   const storedImagePath = row.image_path ?? '';
+  const { meta, description } = parseSliderDescription(row.description ?? '');
   return {
     id: String(row.id),
     title: row.title,
-    description: row.description ?? '',
+    description,
+    showTitle: meta.showTitle,
     storedImagePath,
     imagePath: toStoragePath(storedImagePath),
     imageUrl: resolveImageUrl(storedImagePath, row.updated_at ?? row.created_at),
@@ -282,7 +287,9 @@ export function useUpsertSliderSlide() {
 
       const payload = {
         title: input.title,
-        description: input.description,
+        description: serializeSliderDescription(input.description, {
+          showTitle: input.showTitle !== false,
+        }),
         image_path: imagePathToSave,
         button_enabled: input.button.enabled,
         button_text: input.button.text,

@@ -8,6 +8,7 @@ export type ActivityAction =
   | 'CHANGE_PASSWORD'
   | 'CREATE_PREDICTION'
   | 'UPDATE_PREDICTION'
+  | 'DELETE_PREDICTION'
   | 'CREATE_NEWS'
   | 'UPDATE_NEWS'
   | 'DELETE_NEWS';

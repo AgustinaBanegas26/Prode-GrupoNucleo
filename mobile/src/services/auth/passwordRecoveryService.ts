@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 
 export type PasswordRecoveryErrorCode =
   | 'invalid_email'
+  | 'email_not_found'
+  | 'send_failed'
   | 'rate_limited'
   | 'session_expired'
   | 'invalid_link'
@@ -27,21 +29,94 @@ function getPasswordResetRedirectUrl(): string {
   return 'prode-grupo-nucleo://reset-password';
 }
 
-async function ensureAuthUserExists(email: string): Promise<void> {
-  // Importante: la app NO tiene service_role, por lo que no puede crear usuarios en auth.users.
-  // Este hook intenta llamar a una Edge Function (opcional) que crea/sincroniza el usuario en Auth.
-  // Si no está desplegada, el flujo sigue y Supabase NO enviará mail si el usuario no existe en auth.users.
+function getBackendUrl(): string | null {
+  const url = process.env.EXPO_PUBLIC_BACKEND_URL?.trim();
+  return url || null;
+}
+
+function getSupabaseFunctionsUrl(): string | null {
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+  if (!base) return null;
+  return `${base.replace(/\/$/, '')}/functions/v1/ensure-auth-user`;
+}
+
+async function checkRecoveryEmailExists(email: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('check_recovery_email', {
+    p_email: email,
+  });
+
+  if (error) {
+    // Si la RPC no está desplegada aún, no bloqueamos el flujo completo.
+    console.warn('[PasswordRecovery] check_recovery_email no disponible:', error.message);
+    return true;
+  }
+
+  return Boolean(data);
+}
+
+async function ensureAuthUserViaBackend(email: string, redirectTo: string): Promise<boolean> {
+  const backendUrl = getBackendUrl();
+  if (!backendUrl) return false;
+
+  const response = await fetch(`${backendUrl.replace(/\/$/, '')}/auth/password-recovery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, redirectTo }),
+  });
+
+  if (response.ok) {
+    return true;
+  }
+
+  const body = (await response.json().catch(() => ({}))) as { error?: string };
+  const message = body.error?.trim();
+
+  if (response.status === 404) {
+    throw new PasswordRecoveryError('El correo no existe.', 'email_not_found');
+  }
+  if (response.status === 400 && message) {
+    throw new PasswordRecoveryError(message, 'invalid_email');
+  }
+  if (message) {
+    throw new PasswordRecoveryError(message, 'send_failed');
+  }
+
+  throw new PasswordRecoveryError(
+    'No fue posible enviar el correo. Intente nuevamente.',
+    'send_failed',
+  );
+}
+
+async function ensureAuthUserViaEdgeFunction(email: string): Promise<boolean> {
+  const functionUrl = getSupabaseFunctionsUrl();
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!functionUrl || !anonKey) return false;
+
   try {
-    const { data, error } = await supabase.functions.invoke('ensure-auth-user', {
-      body: { email },
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${anonKey}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify({ email }),
     });
-    if (error) {
-      console.warn('[PasswordRecovery] ensure-auth-user falló:', error.message);
-      return;
+
+    if (response.status === 404) {
+      console.warn('[PasswordRecovery] Edge Function ensure-auth-user no desplegada.');
+      return false;
     }
-    console.log('[PasswordRecovery] ensure-auth-user ok:', data);
+
+    if (!response.ok) {
+      console.warn('[PasswordRecovery] ensure-auth-user respondió', response.status);
+      return false;
+    }
+
+    return true;
   } catch (e) {
-    console.warn('[PasswordRecovery] ensure-auth-user excepción:', e);
+    console.warn('[PasswordRecovery] ensure-auth-user no alcanzable:', e);
+    return false;
   }
 }
 
@@ -76,8 +151,8 @@ function mapSupabaseAuthError(message: string): PasswordRecoveryError {
   }
 
   return new PasswordRecoveryError(
-    'No se pudo completar la operación. Intentá nuevamente.',
-    'unknown',
+    'No fue posible enviar el correo. Intente nuevamente.',
+    'send_failed',
   );
 }
 
@@ -119,11 +194,29 @@ export async function sendPasswordResetEmail(email: string): Promise<void> {
   console.log('[PasswordRecovery] sendPasswordResetEmail()', {
     email: normalizedEmail,
     redirectTo,
+    backendUrl: getBackendUrl() ?? '(no configurado)',
   });
 
-  // Paso clave: si el proyecto usa login legacy (admins/clientes), es probable que no exista el user en auth.users
-  // y Supabase no enviará mail (aunque resetPasswordForEmail devuelva "success" para evitar enumeración).
-  await ensureAuthUserExists(normalizedEmail);
+  const emailExists = await checkRecoveryEmailExists(normalizedEmail);
+  if (!emailExists) {
+    throw new PasswordRecoveryError('El correo no existe.', 'email_not_found');
+  }
+
+  // Backend con service_role: flujo completo (ensure + envío de correo).
+  if (getBackendUrl()) {
+    await ensureAuthUserViaBackend(normalizedEmail, redirectTo);
+    console.log('[PasswordRecovery] correo solicitado vía backend.');
+    return;
+  }
+
+  // Edge Function (si está desplegada) + resetPasswordForEmail desde el cliente.
+  const ensured = await ensureAuthUserViaEdgeFunction(normalizedEmail);
+  if (!ensured) {
+    throw new PasswordRecoveryError(
+      'No fue posible enviar el correo. Intente nuevamente.',
+      'send_failed',
+    );
+  }
 
   const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo,
@@ -134,9 +227,7 @@ export async function sendPasswordResetEmail(email: string): Promise<void> {
     throw mapSupabaseAuthError(error.message);
   }
 
-  console.log(
-    '[PasswordRecovery] resetPasswordForEmail: request enviada (si el email existe en auth.users, llegará el correo).',
-  );
+  console.log('[PasswordRecovery] resetPasswordForEmail: solicitud enviada.');
 }
 
 /**
@@ -155,10 +246,6 @@ export async function establishRecoverySessionFromUrl(url: string): Promise<bool
     throw new PasswordRecoveryError('Enlace de recuperación inválido.', 'invalid_link');
   }
 
-  // Flujos posibles de Supabase:
-  // 1) Implicit: #access_token=...&refresh_token=...
-  // 2) PKCE: ?code=... (recomendado en SDKs nuevos) → exchangeCodeForSession
-  // 3) token_hash (según template/config) → verifyOtp
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {

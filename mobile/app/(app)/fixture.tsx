@@ -258,7 +258,12 @@ export default function FixtureScreen() {
                 key={match.id}
                 match={match}
                 myPick={predMap[match.id]}
-                onPress={() => router.push('/(app)/pronosticos')}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/details/pronostico-partido',
+                    params: { fixtureId: String(match.id) },
+                  })
+                }
               />
             ))
           )}

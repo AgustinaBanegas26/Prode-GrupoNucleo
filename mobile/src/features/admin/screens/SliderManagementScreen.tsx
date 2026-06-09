@@ -55,6 +55,7 @@ type SlideForm = {
   id?: string;
   title: string;
   description: string;
+  showTitle: boolean;
   imageUri?: string;
   imagePath?: string;
   imageUrl?: string;
@@ -70,6 +71,7 @@ function emptyForm(order: number): SlideForm {
   return {
     title: '',
     description: '',
+    showTitle: true,
     buttonEnabled: false,
     buttonText: '',
     buttonInternalLink: '',
@@ -296,6 +298,7 @@ export function SliderManagementScreen() {
       id: s.id,
       title: s.title,
       description: s.description ?? '',
+      showTitle: s.showTitle !== false,
       imageUri: undefined,
       imagePath: s.storedImagePath || s.imagePath,
       imageUrl: s.imageUrl,
@@ -342,8 +345,8 @@ export function SliderManagementScreen() {
   };
 
   const handleSave = async () => {
-    if (!form.title.trim()) {
-      showAlert('Error', 'El título es obligatorio.');
+    if (form.showTitle && !form.title.trim()) {
+      showAlert('Error', 'El título es obligatorio cuando se muestra en el banner.');
       return;
     }
     if (!form.imageUri && !form.imagePath) {
@@ -363,6 +366,7 @@ export function SliderManagementScreen() {
         id: form.id,
         title: form.title.trim(),
         description: form.description.trim(),
+        showTitle: form.showTitle,
         active: form.active,
         order: form.order,
         button: {
@@ -632,25 +636,44 @@ export function SliderManagementScreen() {
                 </View>
               )}
 
-              {/* Título */}
-              <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Título *</Text>
-              <TextInput
-                value={form.title}
-                onChangeText={(v) => setForm((s) => ({ ...s, title: v }))}
-                placeholder="Ej: Copa Mundial FIFA 2026"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[modal.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
+              {/* Mostrar título */}
+              <View style={modal.switchRow}>
+                <View>
+                  <Text style={[modal.switchLabel, { color: theme.colors.text }]}>Mostrar título y subtítulo</Text>
+                  <Text style={[modal.switchHint, { color: theme.colors.muted }]}>
+                    {form.showTitle ? 'Visible en el banner del Inicio' : 'Solo imagen, sin texto ni overlays'}
+                  </Text>
+                </View>
+                <Switch
+                  value={form.showTitle}
+                  onValueChange={(v) => setForm((s) => ({ ...s, showTitle: v }))}
+                  trackColor={{ false: theme.colors.border, true: CELESTE_DARK }}
+                  thumbColor="#fff"
+                />
+              </View>
 
-              {/* Descripción */}
-              <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Descripción</Text>
-              <TextInput
-                value={form.description}
-                onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
-                placeholder="Descripción opcional"
-                placeholderTextColor={theme.colors.placeholder}
-                style={[modal.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
-              />
+              {/* Título */}
+              {form.showTitle ? (
+                <>
+                  <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Título *</Text>
+                  <TextInput
+                    value={form.title}
+                    onChangeText={(v) => setForm((s) => ({ ...s, title: v }))}
+                    placeholder="Ej: Pronosticá el Mundial"
+                    placeholderTextColor={theme.colors.placeholder}
+                    style={[modal.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  />
+
+                  <Text style={[modal.label, { color: theme.colors.textSecondary }]}>Subtítulo</Text>
+                  <TextInput
+                    value={form.description}
+                    onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
+                    placeholder="Descripción opcional"
+                    placeholderTextColor={theme.colors.placeholder}
+                    style={[modal.input, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  />
+                </>
+              ) : null}
 
               {/* Toggle activo */}
               <View style={modal.switchRow}>
