@@ -18,6 +18,7 @@ import { useAppTheme } from '../../src/providers/ThemeProvider';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { supabase } from '../../src/lib/supabase';
 import { radius, spacing } from '../../src/theme/theme';
+import { fetchAvatarMap, resolveAvatarUrl } from '../../src/utils/avatarUrl';
 
 const CELESTE_DARK = '#3DA5F5';
 
@@ -32,20 +33,6 @@ type RankingEntry = {
   diff: number;
   isCurrent: boolean;
 };
-
-async function fetchAvatarMap(clienteIds: string[]): Promise<Record<string, string | null>> {
-  if (!clienteIds.length) return {};
-  const { data, error } = await supabase
-    .from('clientes')
-    .select('cliente_id, avatar_url')
-    .in('cliente_id', clienteIds);
-  if (error) throw new Error(error.message);
-  const map: Record<string, string | null> = {};
-  for (const row of data ?? []) {
-    map[String(row.cliente_id)] = row.avatar_url ?? null;
-  }
-  return map;
-}
 
 function useRankingFromSupabase() {
   const { user } = useAuth();
@@ -117,7 +104,7 @@ function useRankingFromSupabase() {
           setData((prev) =>
             prev.map((entry) =>
               entry.clienteId === clienteId
-                ? { ...entry, avatarUrl: row.avatar_url ?? null }
+                ? { ...entry, avatarUrl: resolveAvatarUrl(row.avatar_url ?? null) }
                 : entry,
             ),
           );

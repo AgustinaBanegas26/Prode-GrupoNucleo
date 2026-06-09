@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 type UserAvatarProps = {
@@ -27,6 +27,7 @@ export function UserAvatar({
   style,
 }: UserAvatarProps) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [uri]);
   const initials = name.slice(0, 2).toUpperCase();
   const radius = size / 2;
 

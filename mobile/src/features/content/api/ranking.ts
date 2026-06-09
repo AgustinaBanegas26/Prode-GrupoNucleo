@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
+import { fetchAvatarMap } from '../../../utils/avatarUrl';
 
 export type RankingRow = {
   id: string;
@@ -28,6 +29,7 @@ export type RankingCacheRow = {
 export type RankingItem = {
   id: string;
   userName: string;
+  avatarUrl: string | null;
   points: number;
   played: number;
   position: number;
@@ -49,13 +51,17 @@ export function useRanking(period: RankingPeriod = 'general') {
           .select('*')
           .order('total_points', { ascending: false });
         if (error) throw new Error(error.message);
-        return ((data ?? []) as RankingRow[]).map((r, i) => {
+        const rows = (data ?? []) as RankingRow[];
+        const avatars = await fetchAvatarMap(rows.map((r) => String(r.cliente_id)));
+        return rows.map((r, i) => {
+          const clienteId = String(r.cliente_id);
           const points = Number(r.total_points);
           const played = Number(r.total_played);
           const pos = Number(r.position);
           return {
-            id: r.cliente_id,
+            id: clienteId,
             userName: r.nombre ?? `Cliente ${r.cliente_id}`,
+            avatarUrl: avatars[clienteId] ?? null,
             points: Number.isFinite(points) ? points : 0,
             played: Number.isFinite(played) ? played : 0,
             position: Number.isFinite(pos) && pos > 0 ? pos : i + 1,
@@ -70,13 +76,19 @@ export function useRanking(period: RankingPeriod = 'general') {
         .eq('scope', scope)
         .order('points', { ascending: false });
       if (error) throw new Error(error.message);
-      return ((data ?? []) as RankingCacheRow[]).map((r, i) => ({
-        id: r.cliente_id,
-        userName: `Cliente ${r.cliente_id}`,
-        points: r.points ?? 0,
-        played: r.played ?? 0,
-        position: i + 1,
-      }));
+      const rows = (data ?? []) as RankingCacheRow[];
+      const avatars = await fetchAvatarMap(rows.map((r) => String(r.cliente_id)));
+      return rows.map((r, i) => {
+        const clienteId = String(r.cliente_id);
+        return {
+          id: clienteId,
+          userName: `Cliente ${r.cliente_id}`,
+          avatarUrl: avatars[clienteId] ?? null,
+          points: r.points ?? 0,
+          played: r.played ?? 0,
+          position: i + 1,
+        };
+      });
     },
     staleTime: 2 * 60 * 1000,
   });
@@ -91,6 +103,9 @@ export function useRankingRealtime() {
         qc.invalidateQueries({ queryKey: ['ranking'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ranking_cache' }, () => {
+        qc.invalidateQueries({ queryKey: ['ranking'] });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clientes' }, () => {
         qc.invalidateQueries({ queryKey: ['ranking'] });
       })
       .subscribe();

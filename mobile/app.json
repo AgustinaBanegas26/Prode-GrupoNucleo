@@ -11,7 +11,14 @@
       "expo-router",
       "expo-font",
       "expo-sharing",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#3DA5F5"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -28,6 +35,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",

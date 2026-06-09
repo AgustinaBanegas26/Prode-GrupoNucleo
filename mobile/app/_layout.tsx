@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 import { subscribeToPasswordRecoveryLinks } from '../src/services/auth/passwordRecoveryService';
 import { useAutoScoringSync } from '../src/hooks/useAutoScoringSync';
 import { useFixtureDbSync } from '../src/hooks/useFixtureDbSync';
+import { usePushNotifications } from '../src/hooks/usePushNotifications';
 
 const PUBLIC_AUTH_ROUTES = new Set([
   'login',
@@ -111,6 +112,12 @@ function FixtureDbSyncListener() {
   return null;
 }
 
+function PushNotificationsListener() {
+  const { user, loading } = useAuth();
+  usePushNotifications(!loading && !!user);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -118,6 +125,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <RecoveryLinkListener />
+            <PushNotificationsListener />
             <FixtureDbSyncListener />
             <AutoScoringSyncListener />
             <AuthGate>

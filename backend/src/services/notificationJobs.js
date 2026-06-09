@@ -58,7 +58,12 @@ async function runTenMinuteReminders() {
   for (const m of matches ?? []) {
     if (await wasLogged('reminder_10m', m.fixture_id, null)) continue;
 
-    await supabase.rpc('lock_predictions_for_fixture', { p_fixture_id: m.fixture_id });
+    const { error: lockErr } = await supabase.rpc('lock_predictions_for_fixture', {
+      p_fixture_id: m.fixture_id,
+    });
+    if (lockErr) {
+      log(`lock_predictions_for_fixture ${m.fixture_id}: ${lockErr.message}`);
+    }
 
     const { data: allClients } = await supabase
       .from('clientes')
@@ -67,16 +72,12 @@ async function runTenMinuteReminders() {
 
     const { data: preds } = await supabase
       .from('predictions')
-      .select('cliente_id, score_home, score_away, home_goals, away_goals')
+      .select('cliente_id, score_home, score_away')
       .eq('fixture_id', m.fixture_id);
 
     const complete = new Set(
       (preds ?? [])
-        .filter((p) => {
-          const home = p.score_home ?? p.home_goals;
-          const away = p.score_away ?? p.away_goals;
-          return home != null && away != null;
-        })
+        .filter((p) => p.score_home != null && p.score_away != null)
         .map((p) => String(p.cliente_id)),
     );
 
@@ -155,12 +156,12 @@ async function runDailyReminder() {
 
   const { data: preds } = await supabase
     .from('predictions')
-    .select('cliente_id, fixture_id, home_goals, away_goals')
+    .select('cliente_id, fixture_id, score_home, score_away')
     .in('fixture_id', fixtureIds);
 
   const completeByClient = new Map();
   for (const p of preds ?? []) {
-    if (p.home_goals == null || p.away_goals == null) continue;
+    if (p.score_home == null || p.score_away == null) continue;
     const key = String(p.cliente_id);
     completeByClient.set(key, (completeByClient.get(key) ?? 0) + 1);
   }

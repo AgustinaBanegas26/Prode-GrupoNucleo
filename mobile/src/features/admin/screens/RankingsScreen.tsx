@@ -10,6 +10,7 @@ import { useScoringConfig, useUpdateScoringConfig } from '../../content/api/scor
 import { useAuth } from '../../../providers/AuthProvider';
 import { adminApiFetch } from '../../../lib/backendApi';
 import { useAutoScoringSync } from '../../../hooks/useAutoScoringSync';
+import { UserAvatar } from '../../../components/UserAvatar';
 
 const CELESTE      = '#6EC6FF';
 const CELESTE_DARK = '#3DA5F5';
@@ -191,6 +192,13 @@ export function RankingsScreen() {
             return (
               <View key={item.id} style={[s.row, { backgroundColor: cardBg, borderColor: cardBorder, shadowColor: CELESTE }]}>
                 <Text style={[s.rank, { color: medal }]}>{pos}</Text>
+                <UserAvatar
+                  name={item.userName}
+                  uri={item.avatarUrl}
+                  size={36}
+                  fallbackBg={isDark ? 'rgba(255,255,255,0.08)' : CELESTE + '22'}
+                  fallbackTextColor={CELESTE_DARK}
+                />
                 <Text style={[s.rowName, { color: theme.colors.text }]} numberOfLines={1}>{item.userName}</Text>
                 <Text style={[s.rowPts, { color: CELESTE_DARK }]}>{item.points}</Text>
                 <Text style={[s.rowPj, { color: textMuted }]}>{item.played}</Text>
